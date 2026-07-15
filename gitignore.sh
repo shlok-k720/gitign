@@ -3,10 +3,16 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: gitign <pattern> [pattern...]
+Usage: gitign [--auto-commit | --no-auto-commit] <pattern> [pattern...]
 
 Add Git ignore patterns relative to the directory where this command is run,
-then stop tracking matching files without deleting them locally.
+then stop tracking matching files without deleting them locally. Changes are
+committed by default.
+
+Options:
+  --auto-commit     Commit gitign's changes (default).
+  --no-auto-commit  Leave gitign's changes for review and manual commit.
+  --help            Show this help.
 
 Presets:
   dsstore    Ignore .DS_Store in this directory and all of its subdirectories.
@@ -14,7 +20,28 @@ Presets:
 EOF
 }
 
-if (($# == 0)); then
+auto_commit=true
+patterns=()
+
+for argument in "$@"; do
+    case "$argument" in
+        --auto-commit)
+            auto_commit=true
+            ;;
+        --no-auto-commit)
+            auto_commit=false
+            ;;
+        --help)
+            usage
+            exit 0
+            ;;
+        *)
+            patterns+=("$argument")
+            ;;
+    esac
+done
+
+if ((${#patterns[@]} == 0)); then
     usage >&2
     exit 2
 fi
@@ -52,6 +79,11 @@ fi
 called_from="${called_from%/}"
 cd "$repo_root"
 
+if "$auto_commit" && ! git diff --cached --quiet; then
+    printf 'gitign: the staging area already has changes; use --no-auto-commit or commit them first.\n' >&2
+    exit 1
+fi
+
 if [[ ! -e .gitignore ]]; then
     printf 'No .gitignore found. Enter a path inside this repository, or type init to create %s/.gitignore: ' \
         "$repo_root" >&2
@@ -75,7 +107,9 @@ if [[ ! -e .gitignore ]]; then
     fi
 fi
 
-for argument in "$@"; do
+affected_paths=()
+
+for argument in "${patterns[@]}"; do
     if [[ -z "$argument" || "$argument" == *$'\n'* || "$argument" == \!* || "$argument" == \#* ]]; then
         printf 'gitign: "%s" is not an ignore pattern that adds files.\n' "$argument" >&2
         exit 2
@@ -112,5 +146,19 @@ for argument in "$@"; do
 
     if ((${#tracked_paths[@]})); then
         git rm --cached -r --ignore-unmatch -- "${tracked_paths[@]}"
+        affected_paths+=("${tracked_paths[@]}")
     fi
 done
+
+if "$auto_commit"; then
+    git add .gitignore
+
+    if ! git diff --cached --quiet -- .gitignore "${affected_paths[@]}"; then
+        if ((${#patterns[@]} == 1)); then
+            commit_message="gitign: ignore ${patterns[0]}"
+        else
+            commit_message="gitign: ignore ${#patterns[@]} patterns"
+        fi
+        git commit -m "$commit_message"
+    fi
+fi

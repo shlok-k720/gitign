@@ -47,16 +47,17 @@
     <h2>What it does</h2>
     <div class="grid">
       <article class="card"><h3>Writes patterns</h3><p>Adds each supplied pattern to the repository root’s <code>.gitignore</code>, without adding duplicates.</p></article>
-      <article class="card"><h3>Untracks safely</h3><p>Runs <code>git rm --cached</code> for matching tracked files. Files remain on disk.</p></article>
+      <article class="card"><h3>Untracks and commits</h3><p>Runs <code>git rm --cached</code> for matching tracked files, then commits by default. Files remain on disk.</p></article>
       <article class="card"><h3>Finds the repository</h3><p>Works from subfolders and asks for a repository path or <code>init</code> when needed.</p></article>
     </div>
 
     <h2>Install</h2>
-    <p>The editable scripts live in <code>~/Library/Application Support/gitign/</code>. Run the installer once, then reload Zsh:</p>
-    <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">bash ~/Library/Application\ Support/gitign/compile-gitign.sh</span>
+    <p>Clone the repository into any editable directory, then run its installer. On macOS, keeping it in <code>~/Library/Application Support/gitign</code> is recommended, but not required.</p>
+    <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">git clone https://github.com/AlphaGo729/gitign.git ~/gitign</span>
+<span class="prompt">$</span> <span class="cmd">bash ~/gitign/compile-gitign.sh</span>
 <span class="prompt">$</span> <span class="cmd">source ~/.zshrc</span>
 <span class="comment"># gitign is now available on your PATH</span></pre></div>
-    <p>The installer makes <code>~/.local/bin/gitign</code> point to the editable <code>gitignore.sh</code> source and adds <code>~/.local/bin</code> to <code>PATH</code>.</p>
+    <p>The installer makes <code>~/.local/bin/gitign</code> point to the editable <code>gitignore.sh</code> source and adds <code>~/.local/bin</code> to <code>PATH</code> in <code>~/.zshrc</code>. Pulling updates in the clone updates the command.</p>
 
     <h2>Quick start</h2>
     <p>Run <code>gitign</code> from any directory within a Git working tree.</p>
@@ -83,6 +84,15 @@
     <div class="callout"><strong>Quote glob patterns.</strong> In Zsh, quote arguments containing <code>*</code>, <code>?</code>, <code>[</code>, or <code>!</code> so the shell does not expand them before <code>gitign</code> receives them.</div>
     <p>Patterns are relative to the directory where you run <code>gitign</code>. A pattern beginning with <code>/</code> is relative to the repository root instead.</p>
 
+    <h2>Automatic commits</h2>
+    <p><code>gitign</code> commits its own changes by default, using <code>gitign: ignore &lt;pattern&gt;</code> for one pattern or <code>gitign: ignore N patterns</code> for several.</p>
+    <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">gitign</span> <span class="string">database.db</span>
+<span class="comment"># Adds the pattern, untracks matching files, and creates a commit.</span>
+
+<span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--no-auto-commit</span> <span class="string">database.db</span>
+<span class="comment"># Makes the same changes but leaves them for your review.</span></pre></div>
+    <p><code>--auto-commit</code> explicitly enables the default. To avoid capturing unrelated work, auto-commit stops if the staging area already has changes.</p>
+
     <h2>When setup is missing</h2>
     <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">gitign</span> <span class="string">app.log</span>
 No Git repository found. Enter a repository path, or type init to initialize one in /your/folder:
@@ -98,7 +108,7 @@ No .gitignore found. Enter a path inside this repository, or type init to create
       <div class="arrow">→</div>
       <div class="step"><strong>2. Normalize pattern</strong><br>Presets expand and subfolder paths are scoped.</div>
       <div class="arrow">→</div>
-      <div class="step"><strong>3. Update Git</strong><br>Append to <code>.gitignore</code>, then remove matching index entries.</div>
+      <div class="step"><strong>3. Update Git</strong><br>Append to <code>.gitignore</code>, remove matching index entries, then commit.</div>
     </div>
     <p>The central logic is intentionally small:</p>
     <div class="terminal"><pre><span class="comment"># Expand friendly preset names into Git ignore patterns.</span>
@@ -111,9 +121,10 @@ No .gitignore found. Enter a path inside this repository, or type init to create
 <span class="comment"># Keep matching files locally but remove them from Git's index.</span>
 <span class="cmd">git rm</span> <span class="flag">--cached -r --ignore-unmatch</span> <span class="flag">--</span> <span class="string">"${tracked_paths[@]}"</span></pre></div>
 
-    <h2>After running it</h2>
-    <p>Review the changes, then stage and commit them. The command does not create a commit for you.</p>
-    <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">git status</span>
+    <h2>Reviewing instead of committing</h2>
+    <p>Pass <code>--no-auto-commit</code> when you want to inspect and commit the result yourself.</p>
+    <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--no-auto-commit</span> <span class="string">'**/*.log'</span>
+<span class="prompt">$</span> <span class="cmd">git status</span>
 <span class="prompt">$</span> <span class="cmd">git add .gitignore</span>
 <span class="prompt">$</span> <span class="cmd">git add -u</span>
 <span class="prompt">$</span> <span class="cmd">git commit -m</span> <span class="string">"Ignore local generated files"</span></pre></div>
