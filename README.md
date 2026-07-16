@@ -216,7 +216,7 @@ Outside a repository, gitign asks for an existing repository path or `init` to r
 7. Records the action under `.git/gitign/` for one-step undo.
 8. Commits the staged repository changes only when auto-commit is enabled and the staging area was initially clean.
 
-## Development and releases
+## Development and releases (only for developer)
 
 Run the shell suite:
 
