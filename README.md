@@ -16,6 +16,8 @@ Gitign runs on macOS and Linux, plus Windows through Git Bash or WSL. The `--tra
 
 On Linux, gitign uses a same-filesystem FreeDesktop Trash directory when the source is on a different mounted volume. WSL uses the Linux Trash adapter because Windows Recycle Bin APIs cannot recycle its UNC filesystem paths. On unsupported Bash environments, or when Git Bash cannot find Windows PowerShell, `--trash` stops with a clear error. Use `--backup-dir` for a portable recoverable alternative.
 
+All remaining Gitign commands use Git plus standard Bash/POSIX utilities and work across these supported environments. Shell scripts are checked out with LF line endings, including under Git Bash with `core.autocrlf=true`.
+
 Clone into any editable directory:
 
 ```sh
@@ -91,6 +93,8 @@ Quote patterns containing `*`, `?`, `[`, or `!` so the shell passes them to `git
 | `--help`, `--version` | n/a | Display usage or installed version. |
 
 Both `--delete_local` and `--delete-local` are accepted.
+
+On Windows Git Bash and WSL, `--backup-dir` accepts either a POSIX path or a drive-letter path such as `C:\Users\you\gitign-backups`; gitign converts the latter before moving files.
 
 ## Presets
 

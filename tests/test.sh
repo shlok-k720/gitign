@@ -155,7 +155,8 @@ test_linux_and_windows_trash_adapters() {
     local windows_repository="$workspace/windows-trash"
     local windows_home="$workspace/windows-home"
     local windows_log="$workspace/windows-trash.log"
-    mkdir -p "$fake_bin" "$linux_home" "$windows_home"
+    local windows_backup="$workspace/windows-backup"
+    mkdir -p "$fake_bin" "$linux_home" "$windows_home" "$windows_backup"
 
     cat > "$fake_bin/uname" <<'EOF'
 #!/usr/bin/env bash
@@ -218,8 +219,11 @@ printf 'MINGW64_NT-10.0\n'
 EOF
     cat > "$fake_bin/cygpath" <<'EOF'
 #!/usr/bin/env bash
-[[ "$1" == -w ]]
-printf 'C:\\GitignTest\\%s\n' "$(basename "$2")"
+    case "$1" in
+        -w) printf 'C:\\GitignTest\\%s\n' "$(basename "$2")" ;;
+        -u) printf '%s\n' "$GITIGN_WINDOWS_BACKUP_DIR" ;;
+        *) exit 2 ;;
+    esac
 EOF
     cat > "$fake_bin/powershell.exe" <<'EOF'
 #!/usr/bin/env bash
@@ -240,7 +244,17 @@ EOF
     )
     [[ ! -e "$windows_repository/windows-trash.tmp" ]]
     grep -Fqx 'C:\GitignTest\windows-trash.tmp|file' "$windows_log"
-    pass 'FreeDesktop Linux Trash and Windows Recycle Bin adapters'
+
+    touch "$windows_repository/windows-backup.tmp"
+    (
+        cd "$windows_repository"
+        HOME="$windows_home" PATH="$fake_bin:$PATH" \
+            GITIGN_WINDOWS_BACKUP_DIR="$windows_backup" \
+            "$gitign" --yes --no-auto-commit --backup-dir 'C:\GitignBackup' windows-backup.tmp >/dev/null
+    )
+    [[ ! -e "$windows_repository/windows-backup.tmp" ]]
+    [[ -f "$windows_backup/windows-backup.tmp" ]]
+    pass 'FreeDesktop Linux Trash, Windows Recycle Bin, and Windows backup paths'
 }
 
 test_presets_global_and_quiet_output() {
@@ -292,6 +306,18 @@ test_undo_auto_commit() {
     )
     [[ -n "$(git -C "$repository" ls-files -- coverage.txt)" ]]
     [[ ! -s "$repository/.gitignore" ]]
+
+    local manual_repository="$workspace/manual-undo"
+    new_repository "$manual_repository"
+    touch "$manual_repository/manual.txt"
+    git -C "$manual_repository" add manual.txt
+    git -C "$manual_repository" commit -qm initial
+    (
+        cd "$manual_repository"
+        printf 'init\n' | "$gitign" --yes --no-auto-commit manual.txt >/dev/null
+        "$gitign" --undo >/dev/null
+    )
+    [[ -n "$(git -C "$manual_repository" ls-files -- manual.txt)" ]]
     pass 'automatic-commit undo'
 }
 
@@ -316,6 +342,7 @@ test_global_auto_commit_undo() {
 
 test_installer_and_release_tooling() {
     local home="$workspace/installer-home"
+    local unconfigured_home="$workspace/unconfigured-home"
     mkdir -p "$home"
 
     [[ "$(HOME="$home" "$installer" --print-install-path)" == "$home/.local/bin/gitign" ]]
@@ -326,6 +353,8 @@ test_installer_and_release_tooling() {
     HOME="$home" "$installer" --uninstall --shell fish >/dev/null
     [[ ! -e "$home/.local/bin/gitign" ]]
     ! grep -Fq '# >>> gitign PATH >>>' "$home/.config/fish/config.fish"
+    mkdir -p "$unconfigured_home"
+    HOME="$unconfigured_home" "$installer" --uninstall --shell bash >/dev/null
 
     HOME="$home" SHELL=/bin/bash "$installer" --shell bash >/dev/null
     grep -Fqx '# >>> gitign PATH >>>' "$home/.bashrc"
@@ -345,6 +374,7 @@ test_installer_and_release_tooling() {
     "$release_copy/scripts/release.sh" 1.2.3 >/dev/null
     [[ "$(<"$release_copy/VERSION.txt")" == 1.2.3 ]]
     grep -Fqx 'VERSION_STRING="1.2.3"' "$release_copy/gitignore.sh"
+    [[ "$(git -C "$root" check-attr eol -- gitignore.sh | awk '{ print $3 }')" == lf ]]
     pass 'cross-shell installer lifecycle and version release tooling'
 }
 

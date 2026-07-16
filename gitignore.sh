@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-VERSION_STRING="1.1.0"
+VERSION_STRING="1.1.1"
 
 usage() {
     cat <<'EOF'
@@ -102,7 +102,23 @@ is_boolean() {
 }
 
 is_absolute_path() {
-    [[ "$1" == /* ]]
+    [[ "$1" == /* || "$1" =~ ^[A-Za-z]:[\\/].* ]]
+}
+
+normalize_backup_directory() {
+    local directory="$1"
+    local converter=""
+
+    if [[ "$directory" =~ ^[A-Za-z]:[\\/].* ]]; then
+        for converter in cygpath wslpath; do
+            if command -v "$converter" >/dev/null 2>&1; then
+                "$converter" -u "$directory"
+                return
+            fi
+        done
+        die 'a Windows-style --backup-dir path requires cygpath or wslpath.'
+    fi
+    printf '%s' "$directory"
 }
 
 array_contains() {
@@ -277,6 +293,9 @@ apply_configuration() {
     "$quiet" && verbose=false
     if [[ "$deletion_mode" == backup && -z "$backup_dir" ]]; then
         die '--backup-dir requires a directory.'
+    fi
+    if [[ "$deletion_mode" == backup ]]; then
+        backup_dir="$(normalize_backup_directory "$backup_dir")"
     fi
     if [[ "$deletion_mode" == trash ]]; then
         detect_trash_platform
@@ -937,7 +956,7 @@ undo_last_action() {
                 undo_tracked_paths+=("$path")
             done < "$undo_directory/tracked-paths"
             if ((${#undo_tracked_paths[@]})); then
-                git restore --staged -- "${undo_tracked_paths[@]}"
+                git reset -q HEAD -- "${undo_tracked_paths[@]}"
                 changed=true
             fi
         fi

@@ -89,7 +89,7 @@ remove_path_block() {
 local config="$1"
 local target=""
 local temporary_file=""
-[[ -f "$config" ]] || return
+[[ -f "$config" ]] || return 0
 target="$(resolve_config_target "$config")"
 temporary_file="$(mktemp "$(dirname "$target")/.$(basename "$target").gitign.XXXXXX")"
 awk '

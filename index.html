@@ -58,7 +58,7 @@
 <span class="prompt">$</span> <span class="cmd">bash ~/gitign/compile-gitign.sh</span>
 <span class="prompt">$</span> <span class="cmd">source ~/.zshrc</span>
 <span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--version</span></pre></div>
-      <p>The installer creates <code>~/.local/bin/gitign</code>, injects the release version, and configures the PATH block for the detected Zsh, Bash, or Fish shell. Override detection with <code>--shell zsh</code>, <code>--shell bash</code>, or <code>--shell fish</code>. Gitign supports macOS, Linux, Windows Git Bash, and WSL.</p>
+      <p>The installer creates <code>~/.local/bin/gitign</code>, injects the release version, and configures the PATH block for the detected Zsh, Bash, or Fish shell. Override detection with <code>--shell zsh</code>, <code>--shell bash</code>, or <code>--shell fish</code>. Gitign supports macOS, Linux, Windows Git Bash, and WSL. Bash sources are checked out with LF endings under Git Bash, even when <code>core.autocrlf</code> is enabled.</p>
       <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">bash compile-gitign.sh</span> <span class="flag">--print-install-path</span>
 <span class="prompt">$</span> <span class="cmd">git pull &amp;&amp; bash compile-gitign.sh</span> <span class="flag">--reinstall</span>
 <span class="prompt">$</span> <span class="cmd">bash compile-gitign.sh</span> <span class="flag">--uninstall</span></pre></div>
@@ -110,7 +110,7 @@
           <tr><td>Windows Git Bash</td><td>Windows Recycle Bin through PowerShell</td></tr>
         </tbody>
       </table>
-      <p>Linux selects a same-filesystem FreeDesktop Trash directory when needed. WSL uses that Linux adapter because Windows cannot recycle WSL UNC paths. Unsupported Bash environments, or Git Bash without PowerShell, show an error instead of falling back to permanent deletion. <code>--backup-dir</code> is the portable recovery option.</p>
+      <p>Linux selects a same-filesystem FreeDesktop Trash directory when needed. WSL uses that Linux adapter because Windows cannot recycle WSL UNC paths. Unsupported Bash environments, or Git Bash without PowerShell, show an error instead of falling back to permanent deletion. <code>--backup-dir</code> is the portable recovery option and accepts either POSIX paths or Windows drive-letter paths in Git Bash/WSL.</p>
       <p>Before local handling, gitign asks interactive users for confirmation. It also confirms automatic commits for broad operations (globs or multiple patterns). In non-interactive scripts and CI, it proceeds automatically; use <code>--dry-run</code> to audit a command or <code>--yes</code> to state approval explicitly.</p>
       <p>Gitign evaluates deletion with Git's ignore matcher after adding the requested rule. This prevents an overlapping older ignore rule from causing unrelated local paths to be removed.</p>
     </section>
