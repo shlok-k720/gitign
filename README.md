@@ -1,108 +1,224 @@
 # gitign
 
-`gitign` adds Git ignore patterns, removes matching files from Git tracking, optionally deletes those files locally, and commits those changes by default.
+`gitign` adds Git ignore rules, stops tracking matching files, and optionally deletes, trashes, or backs up local matches. It previews every resolved pattern before changing anything and automatically commits repository changes by default.
 
 ## Install
 
-Requirements: Git, Bash, and Zsh. The installer puts the `gitign` command in `~/.local/bin` and adds that directory to `~/.zshrc`.
+Requirements: Git and Bash. The installer supports Zsh, Bash, and Fish.
 
-Clone the repository anywhere you can edit it:
+Clone into any editable directory:
 
 ```sh
 git clone https://github.com/shlok-k720/gitign.git ~/gitign
 cd ~/gitign
 bash compile-gitign.sh
-source ~/.zshrc
 ```
 
-Keeping the clone in `~/Library/Application Support/gitign` is recommended on macOS because it separates this user-level tool from project folders:
+On macOS, cloning into `~/Library/Application Support/gitign` is recommended because it keeps a user-level tool separate from project folders:
 
 ```sh
 git clone https://github.com/shlok-k720/gitign.git \
   "$HOME/Library/Application Support/gitign"
 bash "$HOME/Library/Application Support/gitign/compile-gitign.sh"
-source ~/.zshrc
 ```
 
-The installer creates `~/.local/bin/gitign` as a standalone copied command. Re-run `bash compile-gitign.sh` after pulling updates in the clone to refresh the installed command.
+Restart the selected shell, or source its startup file. The installer detects `$SHELL` automatically; pass `--shell zsh`, `--shell bash`, or `--shell fish` to override it.
 
-## Use
+```sh
+source ~/.zshrc
+gitign --version
+```
+
+The installed command is `~/.local/bin/gitign`. It is a version-injected copy of `gitignore.sh`; after pulling repository updates, rerun the installer:
+
+```sh
+cd ~/gitign
+git pull
+bash compile-gitign.sh --reinstall
+```
+
+Installer lifecycle commands:
+
+```sh
+bash compile-gitign.sh --print-install-path
+bash compile-gitign.sh --reinstall
+bash compile-gitign.sh --uninstall
+```
+
+## Quick start
 
 Run `gitign` from any directory inside a Git working tree:
 
 ```sh
-gitign dsstore
 gitign nodemodules
+gitign dsstore
 gitign database.db
 gitign '*/tmp.js'
 gitign build/
-gitign '**/*.log'
-gitign --delete_local build/
 ```
 
-Arguments are Git ignore patterns relative to the directory where you run `gitign`; each is written to the repository root's `.gitignore`. A leading `/` makes a pattern relative to the repository root.
+`gitign` shows the resolved ignore pattern and the number of tracked/local matches before it applies an action. Patterns are relative to the directory where the command is run. Prefix a pattern with `/` to make it relative to the repository root.
 
-| Command | Pattern added | Result |
+Quote patterns containing `*`, `?`, `[`, or `!` so the shell passes them to `gitign` unchanged.
+
+## Options
+
+| Option | Default | Behavior |
 | --- | --- | --- |
-| `gitign dsstore` | `**/.DS_Store` | Ignores `.DS_Store` recursively. |
-| `gitign nodemodules` | `**/node_modules/` | Ignores `node_modules` folders recursively. |
-| `gitign cache/` | `cache/` | Ignores a directory and its contents. |
-| `gitign '**/database.db'` | `**/database.db` | Ignores matching files recursively. |
+| `--auto-commit` | enabled | Commit gitign's repository changes. |
+| `--no-auto-commit` | disabled | Leave the ignore and untracking changes for review. |
+| `--commit-message TEXT` | generated | Use `TEXT` for the automatic commit. |
+| `--delete_local` | disabled | Permanently delete precisely matched local files/directories. |
+| `--trash` | disabled | Move matches to `~/.Trash`; macOS only. |
+| `--backup-dir DIR` | disabled | Move matches into `DIR`, preserving their relative paths. |
+| `--dry-run` | disabled | Show the plan without changing files, Git config, or commits. |
+| `--undo` | n/a | Undo the latest recorded gitign action when it is safe. |
+| `--recursive-filenames` | disabled | Turn a bare filename such as `database.db` into `**/database.db`. |
+| `--global` | disabled | Add rules to Git's global ignore file rather than repository `.gitignore`. |
+| `--verbose` | disabled | List every planned match. |
+| `--quiet` | disabled | Suppress normal output; errors still print. |
+| `--yes` | disabled | Skip interactive confirmations. |
+| `--help`, `--version` | n/a | Display usage or installed version. |
 
-Quote patterns containing `*`, `?`, `[`, or `!` so your shell passes the pattern to `gitign` instead of expanding it first.
+Both `--delete_local` and `--delete-local` are accepted.
 
-Other commands:
+## Presets
+
+| Preset | Ignore pattern |
+| --- | --- |
+| `dsstore` | `**/.DS_Store` |
+| `nodemodules` | `**/node_modules/` |
+| `env` | `**/.env` |
+| `logs` | `**/*.log` |
+| `coverage` | `coverage/` |
+| `dist` | `dist/` |
+| `vscode` | `.vscode/` |
+| `idea` | `.idea/` |
+| `pythoncache` | `**/__pycache__/` |
+
+For example:
+
 ```sh
-gitign --version
-gitign --help
+gitign nodemodules env
+gitign --recursive-filenames database.db
+gitign --global dsstore
 ```
 
-## Local deletion
+## Safety, local files, and commits
 
-Pass `--delete_local` to remove matching local files and directories after they have been ignored:
+`gitign` appends a pattern only when that exact pattern is not already present. It uses Git's ignore matcher after adding the rule, so local deletion handles only paths matched by the requested rule, not files that merely overlap an older ignore rule.
+
+| Mode | Git ignore rule | Git tracking | Local file |
+| --- | --- | --- | --- |
+| `gitign build/` | added | matching tracked files are untracked | kept |
+| `gitign --delete_local build/` | added | matching tracked files are untracked | permanently deleted |
+| `gitign --trash build/` | added | matching tracked files are untracked | moved to macOS Trash |
+| `gitign --backup-dir ../backups build/` | added | matching tracked files are untracked | moved to a recoverable backup |
+
+Examples:
 
 ```sh
+# Preview first: no changes are made.
+gitign --dry-run --verbose --delete_local build/
+
+# Remove the local build output permanently.
 gitign --delete_local build/
-gitign --delete_local nodemodules
-gitign --delete_local '**/*.log'
+
+# Safer alternatives.
+gitign --trash nodemodules
+gitign --backup-dir ../gitign-backups '**/*.log'
 ```
 
-By default, `gitign` keeps your local files. `--delete_local` is opt-in because it permanently removes matching local content from the working tree.
+Local handling is opt-in; normal `gitign` commands never remove local files. `--trash` is macOS-only. `--backup-dir` works on any supported system and is the only deletion mode whose untracked files can be restored by `--undo`.
 
-## Automatic commits
+When standard input is a terminal, gitign asks before local deletion/trash/backup and before automatic commits for broad operations (multiple or glob patterns). In non-interactive shells and CI, it proceeds automatically; use `--dry-run` to preview scripts, or `--yes` to make approval explicit.
 
-`gitign` commits its `.gitignore` and matching untracking changes by default:
-
-```sh
-gitign database.db
-# Creates: gitign: ignore database.db
-```
-
-Use `--no-auto-commit` to leave changes for review and manual staging:
+Automatic commits require a clean staging area, so gitign never captures unrelated staged work. Its generated message is `gitign: ignore PATTERN` for one pattern or `gitign: ignore N patterns` for multiple patterns. Use `--commit-message` to override it:
 
 ```sh
-gitign --no-auto-commit database.db
+gitign --commit-message "Ignore generated assets" dist/
+gitign --no-auto-commit --delete_local build/
 git status
-git add .gitignore
-git add -u
-git commit -m "Ignore database"
 ```
 
-`--auto-commit` explicitly enables the default behavior. When auto-commit is enabled, `gitign` refuses to run if the staging area already has changes, preventing it from committing unrelated staged edits.
+If no ignore rule, index entry, or local path changes, gitign explicitly reports that no commit was created.
 
-## Missing repository or `.gitignore`
+## Undo
 
-Outside a repository, `gitign` prompts for the path to an existing Git working tree or for `init`, which runs `git init` in the current directory.
+`gitign --undo` reverses the latest action recorded for the current repository:
 
-If that repository has no root `.gitignore`, it prompts for a path inside the repository or for `init`, which creates the file at the repository root.
+```sh
+gitign --backup-dir ../gitign-backups '*.log'
+gitign --undo
+```
+
+For an automatic commit, undo creates a Git revert and only runs when the gitign commit is still `HEAD`. For a non-committed action, it removes the rule it added and restores affected index entries. Backup-mode local files are moved back when their original path is free. Permanently deleted and trashed files cannot be restored automatically.
+
+Use `gitign --dry-run --undo` to preview the undo plan.
+
+## Repository configuration
+
+Place `.gitignrc` in a repository root to set defaults. Command-line options override configuration.
+
+```ini
+# .gitignrc
+auto_commit=false
+recursive_filenames=true
+deletion_mode=backup
+backup_dir=../gitign-backups
+confirm=true
+verbose=false
+```
+
+Supported keys:
+
+```ini
+auto_commit=true|false
+delete_local=true|false
+deletion_mode=keep|delete|trash|backup
+backup_dir=PATH
+recursive_filenames=true|false
+global_ignore=true|false
+confirm=true|false
+verbose=true|false
+quiet=true|false
+commit_message=TEXT
+```
+
+`--global` writes to the file configured by `git config --global core.excludesFile`. If no file is configured, gitign creates and configures `~/.config/git/ignore`.
+
+## Missing setup
+
+Outside a repository, gitign asks for an existing repository path or `init` to run `git init` in the current directory. If the repository has no `.gitignore`, it asks for a path inside the repository or `init` to create the root `.gitignore`.
 
 ## How it works
 
-1. Git resolves the working tree, repository root, and relative directory where the command was called.
-2. Presets expand into normal Git ignore patterns, and duplicate patterns are not appended.
-3. `git ls-files -ci --exclude=<pattern>` finds tracked files that now match.
-4. If `--delete_local` is given, `gitign` deletes matching local files and directories after they become ignored.
-5. `git rm --cached` removes tracked matches from Git's index.
-6. Unless `--no-auto-commit` is given, Git commits the `.gitignore` update and the files that `gitign` untracked. It first requires a clean staging area, so no unrelated staged changes are included.
+1. Resolves the Git repository and loads optional `.gitignrc` defaults.
+2. Expands presets and optional recursive filename patterns.
+3. Previews exact resolved rules plus tracked/local candidate counts.
+4. Adds rules to repository or global ignore configuration.
+5. Uses `git rm --cached` to remove matching tracked entries without deleting them by default.
+6. When requested, uses Git's ignore matcher to precisely select local paths for deletion, Trash, or backup.
+7. Records the action under `.git/gitign/` for one-step undo.
+8. Commits the staged repository changes only when auto-commit is enabled and the staging area was initially clean.
 
-Without `--delete_local`, the files remain on your computer throughout this process.
+## Development and releases
+
+Run the shell suite:
+
+```sh
+bash tests/test.sh
+```
+
+Set a semantic version consistently in `VERSION.txt` and `VERSION_STRING`:
+
+```sh
+scripts/release.sh 1.2.3
+```
+
+Create a version commit and annotated tag:
+
+```sh
+scripts/release.sh 1.2.3 --tag
+git push origin main --tags
+```
