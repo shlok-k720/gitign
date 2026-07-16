@@ -9,7 +9,7 @@ Requirements: Git, Bash, and Zsh. The installer puts the `gitign` command in `~/
 Clone the repository anywhere you can edit it:
 
 ```sh
-git clone https://github.com/AlphaGo729/gitign.git ~/gitign
+git clone https://github.com/shlok-k720/gitign.git ~/gitign
 cd ~/gitign
 bash compile-gitign.sh
 source ~/.zshrc
@@ -18,7 +18,7 @@ source ~/.zshrc
 Keeping the clone in `~/Library/Application Support/gitign` is recommended on macOS because it separates this user-level tool from project folders:
 
 ```sh
-git clone https://github.com/AlphaGo729/gitign.git \
+git clone https://github.com/shlok-720/gitign.git \
   "$HOME/Library/Application Support/gitign"
 bash "$HOME/Library/Application Support/gitign/compile-gitign.sh"
 source ~/.zshrc
