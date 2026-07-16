@@ -6,6 +6,16 @@
 
 Requirements: Git and Bash. The installer supports Zsh, Bash, and Fish.
 
+Gitign runs on macOS and Linux, plus Windows through Git Bash or WSL. The `--trash` adapter uses each platform's native trash location:
+
+| Platform | `--trash` destination |
+| --- | --- |
+| macOS | User Trash (`~/.Trash`) |
+| Linux and WSL | FreeDesktop Trash (`$XDG_DATA_HOME/Trash`, or `~/.local/share/Trash`) |
+| Windows Git Bash | Windows Recycle Bin through PowerShell |
+
+On Linux, gitign uses a same-filesystem FreeDesktop Trash directory when the source is on a different mounted volume. WSL uses the Linux Trash adapter because Windows Recycle Bin APIs cannot recycle its UNC filesystem paths. On unsupported Bash environments, or when Git Bash cannot find Windows PowerShell, `--trash` stops with a clear error. Use `--backup-dir` for a portable recoverable alternative.
+
 Clone into any editable directory:
 
 ```sh
@@ -69,7 +79,7 @@ Quote patterns containing `*`, `?`, `[`, or `!` so the shell passes them to `git
 | `--no-auto-commit` | disabled | Leave the ignore and untracking changes for review. |
 | `--commit-message TEXT` | generated | Use `TEXT` for the automatic commit. |
 | `--delete_local` | disabled | Permanently delete precisely matched local files/directories. |
-| `--trash` | disabled | Move matches to `~/.Trash`; macOS only. |
+| `--trash` | disabled | Move matches to the native operating system Trash. |
 | `--backup-dir DIR` | disabled | Move matches into `DIR`, preserving their relative paths. |
 | `--dry-run` | disabled | Show the plan without changing files, Git config, or commits. |
 | `--undo` | n/a | Undo the latest recorded gitign action when it is safe. |
@@ -112,7 +122,7 @@ gitign --global dsstore
 | --- | --- | --- | --- |
 | `gitign build/` | added | matching tracked files are untracked | kept |
 | `gitign --delete_local build/` | added | matching tracked files are untracked | permanently deleted |
-| `gitign --trash build/` | added | matching tracked files are untracked | moved to macOS Trash |
+| `gitign --trash build/` | added | matching tracked files are untracked | moved to the native operating system Trash |
 | `gitign --backup-dir ../backups build/` | added | matching tracked files are untracked | moved to a recoverable backup |
 
 Examples:
@@ -129,7 +139,7 @@ gitign --trash nodemodules
 gitign --backup-dir ../gitign-backups '**/*.log'
 ```
 
-Local handling is opt-in; normal `gitign` commands never remove local files. `--trash` is macOS-only. `--backup-dir` works on any supported system and is the only deletion mode whose untracked files can be restored by `--undo`.
+Local handling is opt-in; normal `gitign` commands never remove local files. `--trash` detects macOS, FreeDesktop Linux/WSL, and Windows Git Bash automatically. `--backup-dir` works on every Gitign-supported Bash environment and is the only deletion mode whose untracked files can be restored by `--undo`.
 
 When standard input is a terminal, gitign asks before local deletion/trash/backup and before automatic commits for broad operations (multiple or glob patterns). In non-interactive shells and CI, it proceeds automatically; use `--dry-run` to preview scripts, or `--yes` to make approval explicit.
 
@@ -198,7 +208,7 @@ Outside a repository, gitign asks for an existing repository path or `init` to r
 3. Previews exact resolved rules plus tracked/local candidate counts.
 4. Adds rules to repository or global ignore configuration.
 5. Uses `git rm --cached` to remove matching tracked entries without deleting them by default.
-6. When requested, uses Git's ignore matcher to precisely select local paths for deletion, Trash, or backup.
+6. When requested, uses Git's ignore matcher to precisely select local paths for deletion, backup, or OS-specific Trash handling.
 7. Records the action under `.git/gitign/` for one-step undo.
 8. Commits the staged repository changes only when auto-commit is enabled and the staging area was initially clean.
 

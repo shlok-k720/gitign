@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-VERSION_STRING="1.0.0"
+VERSION_STRING="1.1.0"
 
 usage() {
     cat <<'EOF'
@@ -17,7 +17,7 @@ Safety and commits:
   --no-auto-commit           Leave changes for review and manual commit.
   --commit-message MESSAGE   Use MESSAGE for the automatic commit.
   --delete_local             Permanently delete matching local files/directories.
-  --trash                    Move matching local files/directories to ~/.Trash (macOS).
+  --trash                    Move matching local files/directories to the operating system Trash.
   --backup-dir DIRECTORY     Move matching local paths into DIRECTORY.
   --dry-run                  Preview all changes without modifying anything.
   --undo                     Reverse the most recent gitign action when possible.
@@ -278,8 +278,8 @@ apply_configuration() {
     if [[ "$deletion_mode" == backup && -z "$backup_dir" ]]; then
         die '--backup-dir requires a directory.'
     fi
-    if [[ "$deletion_mode" == trash && "$(uname -s)" != Darwin ]]; then
-        die '--trash is supported only on macOS; use --backup-dir on this system.'
+    if [[ "$deletion_mode" == trash ]]; then
+        detect_trash_platform
     fi
 }
 
@@ -451,17 +451,276 @@ backup_destination_for() {
     printf '%s' "$destination"
 }
 
-move_to_trash() {
+detect_trash_platform() {
+    local kernel=""
+    kernel="$(uname -s)"
+    windows_powershell_command=""
+
+    case "$kernel" in
+        Darwin)
+            trash_platform=macos
+            ;;
+        Linux)
+            # WSL paths may be UNC shares, which Windows cannot recycle. Its
+            # Linux Trash adapter works for both native Linux and WSL files.
+            trash_platform=linux
+            ;;
+        MINGW*|MSYS*|CYGWIN*)
+            trash_platform=windows
+            ;;
+        *)
+            die "--trash is unsupported on $kernel; use --backup-dir instead."
+            ;;
+    esac
+
+    if [[ "$trash_platform" == windows ]]; then
+        local candidate=""
+        for candidate in powershell.exe powershell pwsh.exe; do
+            if command -v "$candidate" >/dev/null 2>&1; then
+                windows_powershell_command="$candidate"
+                break
+            fi
+        done
+        [[ -n "$windows_powershell_command" ]] \
+            || die '--trash on Windows requires PowerShell; use --backup-dir instead.'
+    fi
+}
+
+trash_escape_path() {
     local path="$1"
-    local trash_directory="$HOME/.Trash"
-    local destination="$trash_directory/$(basename "$path")"
+    local byte=""
+    local encoded=""
+    local byte_code=0
+    local index=0
+    local result=""
+    local LC_ALL=C
+
+    for ((index = 0; index < ${#path}; index++)); do
+        byte="${path:index:1}"
+        case "$byte" in
+            [A-Za-z0-9._/-])
+                result+="$byte"
+                ;;
+            *)
+                encoded="$(printf '%s' "$byte" | od -An -tx1 | tr -d '[:space:]')"
+                encoded="%$encoded"
+                result+="$encoded"
+                ;;
+        esac
+    done
+    printf '%s' "$result"
+}
+
+unique_trash_destination() {
+    local directory="$1"
+    local name="$2"
+    local destination="$directory/$name"
     local suffix=1
-    mkdir -p "$trash_directory"
+
     while [[ -e "$destination" || -L "$destination" ]]; do
-        destination="$trash_directory/$(basename "$path").gitign-$suffix"
+        destination="$directory/$name.gitign-$suffix"
         suffix=$((suffix + 1))
     done
-    mv -- "$path" "$destination"
+    printf '%s' "$destination"
+}
+
+move_without_overwrite() {
+    local source="$1"
+    local destination="$2"
+
+    mv -n -- "$source" "$destination" || return 1
+    [[ ! -e "$source" && ! -L "$source" ]]
+}
+
+move_to_macos_trash() {
+    local path="$1"
+    local trash_directory="$HOME/.Trash"
+    local destination=""
+
+    mkdir -p "$trash_directory"
+    while [[ -e "$path" || -L "$path" ]]; do
+        destination="$(unique_trash_destination "$trash_directory" "$(basename "$path")")"
+        if move_without_overwrite "$path" "$destination"; then
+            return
+        fi
+        [[ -e "$destination" || -L "$destination" ]] || return 1
+    done
+    return 1
+}
+
+filesystem_device() {
+    df -P "$1" | awk 'NR > 1 { device = $1 } END { print device }'
+}
+
+filesystem_mount_point() {
+    df -P "$1" | awk 'NR > 1 { mount = $NF } END { print mount }'
+}
+
+prepare_linux_trash_directory() {
+    local directory="$1"
+    local child=""
+
+    [[ ! -L "$directory" ]] || return 1
+    mkdir -p "$directory" 2>/dev/null || return 1
+    [[ -d "$directory" && ! -L "$directory" ]] || return 1
+
+    for child in files info; do
+        [[ ! -L "$directory/$child" ]] || return 1
+        mkdir -p "$directory/$child" 2>/dev/null || return 1
+        [[ -d "$directory/$child" && ! -L "$directory/$child" ]] || return 1
+    done
+}
+
+linux_trash_directory_for() {
+    local path="$1"
+    local home_trash="${XDG_DATA_HOME:-$HOME/.local/share}/Trash"
+    local source_device=""
+    local home_device=""
+    local mount_point=""
+    local shared_trash=""
+    local private_trash=""
+    local user_id=""
+
+    prepare_linux_trash_directory "$home_trash" \
+        || die "cannot create the home Trash directory; use --backup-dir instead."
+    source_device="$(filesystem_device "$path")"
+    home_device="$(filesystem_device "$home_trash")"
+    [[ -n "$source_device" && -n "$home_device" ]] \
+        || die 'could not identify the source filesystem for --trash.'
+    if [[ "$source_device" == "$home_device" ]]; then
+        linux_trash_directory="$home_trash"
+        linux_trash_path_base=""
+        return
+    fi
+
+    mount_point="$(filesystem_mount_point "$path")"
+    [[ -n "$mount_point" ]] || die 'could not identify the source mount point for --trash.'
+    user_id="$(id -u)"
+    shared_trash="$mount_point/.Trash"
+    private_trash="$mount_point/.Trash-$user_id"
+
+    if [[ ! -L "$shared_trash" && -d "$shared_trash" && -k "$shared_trash" && -w "$shared_trash" ]] \
+        && prepare_linux_trash_directory "$shared_trash/$user_id"; then
+        linux_trash_directory="$shared_trash/$user_id"
+        linux_trash_path_base="$mount_point"
+        return
+    fi
+
+    prepare_linux_trash_directory "$private_trash" \
+        || die "cannot create a Trash directory on $mount_point; use --backup-dir instead."
+    linux_trash_directory="$private_trash"
+    linux_trash_path_base="$mount_point"
+}
+
+move_to_linux_trash() {
+    local path="$1"
+    local absolute_path=""
+    local trash_directory=""
+    local files_directory=""
+    local info_directory=""
+    local base_name=""
+    local name=""
+    local destination=""
+    local info_file=""
+    local encoded_path=""
+    local path_for_info=""
+    local suffix=1
+
+    absolute_path="$(canonical_path "$path")"
+    linux_trash_directory=""
+    linux_trash_path_base=""
+    linux_trash_directory_for "$path"
+    trash_directory="$linux_trash_directory"
+    files_directory="$trash_directory/files"
+    info_directory="$trash_directory/info"
+    path_for_info="$absolute_path"
+    if [[ -n "$linux_trash_path_base" ]]; then
+        path_for_info="${absolute_path#"$linux_trash_path_base"/}"
+        [[ "$path_for_info" != "$absolute_path" ]] \
+            || die "cannot create a mount-relative Trash path for $path."
+    fi
+    base_name="$(basename "$path")"
+    destination="$files_directory/$base_name"
+
+    while [[ -e "$path" || -L "$path" ]]; do
+        name="$(basename "$destination")"
+        info_file="$info_directory/$name.trashinfo"
+        if [[ -e "$destination" || -L "$destination" || -e "$info_file" ]]; then
+            destination="$files_directory/$base_name.gitign-$suffix"
+            suffix=$((suffix + 1))
+            continue
+        fi
+        if ! (set -C; : > "$info_file") 2>/dev/null; then
+            destination="$files_directory/$base_name.gitign-$suffix"
+            suffix=$((suffix + 1))
+            continue
+        fi
+
+        encoded_path="$(trash_escape_path "$path_for_info")"
+        {
+            printf '[Trash Info]\n'
+            printf 'Path=%s\n' "$encoded_path"
+            printf 'DeletionDate=%s\n' "$(date '+%Y-%m-%dT%H:%M:%S')"
+        } > "$info_file"
+        if move_without_overwrite "$path" "$destination"; then
+            return
+        fi
+        rm -f -- "$info_file"
+        [[ -e "$destination" || -L "$destination" ]] || return 1
+    done
+
+    return 1
+}
+
+windows_path_for() {
+    local path="$1"
+    if command -v cygpath >/dev/null 2>&1; then
+        cygpath -w "$path"
+    elif command -v wslpath >/dev/null 2>&1; then
+        wslpath -w "$path"
+    else
+        die '--trash on Windows requires cygpath or wslpath to convert the file path.'
+    fi
+}
+
+move_to_windows_trash() {
+    local path="$1"
+    local windows_path=""
+    local path_kind=file
+
+    [[ -d "$path" && ! -L "$path" ]] && path_kind=directory
+    windows_path="$(windows_path_for "$path")"
+
+    GITIGN_TRASH_PATH="$windows_path" \
+        GITIGN_TRASH_SOURCE="$path" \
+        GITIGN_TRASH_KIND="$path_kind" \
+        "$windows_powershell_command" -NoProfile -NonInteractive -Command '
+            $ErrorActionPreference = "Stop"
+            Add-Type -AssemblyName Microsoft.VisualBasic
+            if ($env:GITIGN_TRASH_KIND -eq "directory") {
+                [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(
+                    $env:GITIGN_TRASH_PATH,
+                    [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,
+                    [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin
+                )
+            } else {
+                [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile(
+                    $env:GITIGN_TRASH_PATH,
+                    [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,
+                    [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin
+                )
+            }
+        '
+}
+
+move_to_trash() {
+    local path="$1"
+    case "$trash_platform" in
+        macos) move_to_macos_trash "$path" ;;
+        linux) move_to_linux_trash "$path" ;;
+        windows) move_to_windows_trash "$path" ;;
+        *) die 'internal error: no supported Trash platform was selected.' ;;
+    esac
 }
 
 delete_local_paths() {

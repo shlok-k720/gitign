@@ -47,7 +47,7 @@
       <div class="grid">
         <article class="card"><h3>Plans first</h3><p>Shows each resolved pattern and candidate match count before changes are made. Use <code>--dry-run</code> for a no-change preview.</p></article>
         <article class="card"><h3>Updates Git safely</h3><p>Adds rules, untracks matching index entries, and commits by default only when the staging area starts clean.</p></article>
-        <article class="card"><h3>Handles local files explicitly</h3><p>Keeps local files by default. Opt into permanent deletion, macOS Trash, or recoverable backups.</p></article>
+        <article class="card"><h3>Handles local files explicitly</h3><p>Keeps local files by default. Opt into permanent deletion, native operating-system Trash, or recoverable backups.</p></article>
       </div>
     </section>
 
@@ -58,7 +58,7 @@
 <span class="prompt">$</span> <span class="cmd">bash ~/gitign/compile-gitign.sh</span>
 <span class="prompt">$</span> <span class="cmd">source ~/.zshrc</span>
 <span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--version</span></pre></div>
-      <p>The installer creates <code>~/.local/bin/gitign</code>, injects the release version, and configures the PATH block for the detected Zsh, Bash, or Fish shell. Override detection with <code>--shell zsh</code>, <code>--shell bash</code>, or <code>--shell fish</code>.</p>
+      <p>The installer creates <code>~/.local/bin/gitign</code>, injects the release version, and configures the PATH block for the detected Zsh, Bash, or Fish shell. Override detection with <code>--shell zsh</code>, <code>--shell bash</code>, or <code>--shell fish</code>. Gitign supports macOS, Linux, Windows Git Bash, and WSL.</p>
       <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">bash compile-gitign.sh</span> <span class="flag">--print-install-path</span>
 <span class="prompt">$</span> <span class="cmd">git pull &amp;&amp; bash compile-gitign.sh</span> <span class="flag">--reinstall</span>
 <span class="prompt">$</span> <span class="cmd">bash compile-gitign.sh</span> <span class="flag">--uninstall</span></pre></div>
@@ -92,7 +92,7 @@
         <tbody>
           <tr><td><code>gitign build/</code></td><td>added</td><td>matching paths untracked</td><td>kept</td></tr>
           <tr><td><code>gitign --delete_local build/</code></td><td>added</td><td>matching paths untracked</td><td>permanently deleted</td></tr>
-          <tr><td><code>gitign --trash build/</code></td><td>added</td><td>matching paths untracked</td><td>moved to <code>~/.Trash</code> on macOS</td></tr>
+          <tr><td><code>gitign --trash build/</code></td><td>added</td><td>matching paths untracked</td><td>moved to the native operating-system Trash</td></tr>
           <tr><td><code>gitign --backup-dir ../backup build/</code></td><td>added</td><td>matching paths untracked</td><td>moved to backup directory</td></tr>
         </tbody>
       </table>
@@ -101,7 +101,16 @@
 
 <span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--backup-dir</span> <span class="string">../gitign-backups</span> <span class="string">'**/*.log'</span>
 <span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--trash</span> <span class="string">nodemodules</span></pre></div>
-      <div class="callout danger"><strong>Deletion is opt-in.</strong> Normal gitign commands never delete local files. <code>--delete_local</code> permanently removes precisely matched paths. Use <code>--trash</code> on macOS or <code>--backup-dir</code> when recovery matters.</div>
+      <div class="callout danger"><strong>Deletion is opt-in.</strong> Normal gitign commands never delete local files. <code>--delete_local</code> permanently removes precisely matched paths. <code>--trash</code> automatically uses macOS Trash, the FreeDesktop Linux Trash (including WSL), or the Windows Recycle Bin in Git Bash. Use <code>--backup-dir</code> when recovery matters.</div>
+      <table>
+        <thead><tr><th>Platform</th><th>Trash adapter</th></tr></thead>
+        <tbody>
+          <tr><td>macOS</td><td>User Trash at <code>~/.Trash</code></td></tr>
+          <tr><td>Linux / WSL</td><td>FreeDesktop Trash at <code>$XDG_DATA_HOME/Trash</code> or <code>~/.local/share/Trash</code></td></tr>
+          <tr><td>Windows Git Bash</td><td>Windows Recycle Bin through PowerShell</td></tr>
+        </tbody>
+      </table>
+      <p>Linux selects a same-filesystem FreeDesktop Trash directory when needed. WSL uses that Linux adapter because Windows cannot recycle WSL UNC paths. Unsupported Bash environments, or Git Bash without PowerShell, show an error instead of falling back to permanent deletion. <code>--backup-dir</code> is the portable recovery option.</p>
       <p>Before local handling, gitign asks interactive users for confirmation. It also confirms automatic commits for broad operations (globs or multiple patterns). In non-interactive scripts and CI, it proceeds automatically; use <code>--dry-run</code> to audit a command or <code>--yes</code> to state approval explicitly.</p>
       <p>Gitign evaluates deletion with Git's ignore matcher after adding the requested rule. This prevents an overlapping older ignore rule from causing unrelated local paths to be removed.</p>
     </section>

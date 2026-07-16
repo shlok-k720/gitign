@@ -145,6 +145,104 @@ test_precise_delete_backup_trash_and_undo() {
     pass 'precise deletion, backup restoration, and macOS trash mode'
 }
 
+test_linux_and_windows_trash_adapters() {
+    local fake_bin="$workspace/fake-bin"
+    local linux_repository="$workspace/linux-trash"
+    local linux_home="$workspace/linux-home"
+    local mounted_volume="$workspace/mounted-volume"
+    local mounted_repository="$mounted_volume/repository"
+    local mounted_volume_physical=""
+    local windows_repository="$workspace/windows-trash"
+    local windows_home="$workspace/windows-home"
+    local windows_log="$workspace/windows-trash.log"
+    mkdir -p "$fake_bin" "$linux_home" "$windows_home"
+
+    cat > "$fake_bin/uname" <<'EOF'
+#!/usr/bin/env bash
+printf 'Linux\n'
+EOF
+    cat > "$fake_bin/df" <<'EOF'
+#!/usr/bin/env bash
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+path="$2"
+if [[ "$path" != /* ]]; then
+    path="$(cd -P "$(dirname "$path")" && pwd)/$(basename "$path")"
+fi
+if [[ -n "${GITIGN_TEST_MOUNT_ROOT:-}" ]]; then
+    mount_root="$(cd -P "$GITIGN_TEST_MOUNT_ROOT" && pwd)"
+else
+    mount_root=/__gitign_no_mount__
+fi
+if [[ "$path" == "$mount_root"* ]]; then
+    printf '/dev/gitign-mounted 100 1 99 1%% %s\n' "$GITIGN_TEST_MOUNT_ROOT"
+else
+    printf '/dev/gitign-home 100 1 99 1%% /home\n'
+fi
+EOF
+    chmod +x "$fake_bin/uname" "$fake_bin/df"
+
+    new_repository "$linux_repository"
+    touch "$linux_repository/linux trash#.tmp"
+    git -C "$linux_repository" add 'linux trash#.tmp'
+    git -C "$linux_repository" commit -qm initial
+    (
+        cd "$linux_repository"
+        printf 'init\n' | HOME="$linux_home" XDG_DATA_HOME="$linux_home/data" PATH="$fake_bin:$PATH" \
+            "$gitign" --yes --no-auto-commit --trash 'linux trash#.tmp' >/dev/null
+    )
+    [[ ! -e "$linux_repository/linux trash#.tmp" ]]
+    [[ -f "$linux_home/data/Trash/files/linux trash#.tmp" ]]
+    grep -Fqx '[Trash Info]' "$linux_home/data/Trash/info/linux trash#.tmp.trashinfo"
+    grep -Fq 'Path=' "$linux_home/data/Trash/info/linux trash#.tmp.trashinfo"
+    grep -Fq 'linux%20trash%23.tmp' "$linux_home/data/Trash/info/linux trash#.tmp.trashinfo"
+
+    new_repository "$mounted_repository"
+    mounted_volume_physical="$(cd -P "$mounted_volume" && pwd)"
+    touch "$mounted_repository/cross-volume.tmp"
+    git -C "$mounted_repository" add cross-volume.tmp
+    git -C "$mounted_repository" commit -qm initial
+    (
+        cd "$mounted_repository"
+        printf 'init\n' | HOME="$linux_home" XDG_DATA_HOME="$linux_home/data" PATH="$fake_bin:$PATH" \
+            GITIGN_TEST_MOUNT_ROOT="$mounted_volume_physical" \
+            "$gitign" --yes --no-auto-commit --trash cross-volume.tmp >/dev/null
+    )
+    [[ ! -e "$mounted_repository/cross-volume.tmp" ]]
+    [[ -f "$mounted_volume/.Trash-$(id -u)/files/cross-volume.tmp" ]]
+    grep -Fqx 'Path=repository/cross-volume.tmp' \
+        "$mounted_volume/.Trash-$(id -u)/info/cross-volume.tmp.trashinfo"
+
+    cat > "$fake_bin/uname" <<'EOF'
+#!/usr/bin/env bash
+printf 'MINGW64_NT-10.0\n'
+EOF
+    cat > "$fake_bin/cygpath" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == -w ]]
+printf 'C:\\GitignTest\\%s\n' "$(basename "$2")"
+EOF
+    cat > "$fake_bin/powershell.exe" <<'EOF'
+#!/usr/bin/env bash
+printf '%s|%s\n' "$GITIGN_TRASH_PATH" "$GITIGN_TRASH_KIND" >> "$GITIGN_WINDOWS_TRASH_LOG"
+rm -rf -- "$GITIGN_TRASH_SOURCE"
+EOF
+    chmod +x "$fake_bin/uname" "$fake_bin/cygpath" "$fake_bin/powershell.exe"
+
+    new_repository "$windows_repository"
+    touch "$windows_repository/windows-trash.tmp"
+    git -C "$windows_repository" add windows-trash.tmp
+    git -C "$windows_repository" commit -qm initial
+    (
+        cd "$windows_repository"
+        printf 'init\n' | HOME="$windows_home" PATH="$fake_bin:$PATH" \
+            GITIGN_WINDOWS_TRASH_LOG="$windows_log" \
+            "$gitign" --yes --no-auto-commit --trash windows-trash.tmp >/dev/null
+    )
+    [[ ! -e "$windows_repository/windows-trash.tmp" ]]
+    grep -Fqx 'C:\GitignTest\windows-trash.tmp|file' "$windows_log"
+    pass 'FreeDesktop Linux Trash and Windows Recycle Bin adapters'
+}
+
 test_presets_global_and_quiet_output() {
     local repository="$workspace/presets"
     local home="$workspace/global-home"
@@ -257,6 +355,7 @@ test_auto_commit_and_noop
 test_dry_run_and_recursive_config
 test_preflight_guards
 test_precise_delete_backup_trash_and_undo
+test_linux_and_windows_trash_adapters
 test_presets_global_and_quiet_output
 test_undo_auto_commit
 test_global_auto_commit_undo
