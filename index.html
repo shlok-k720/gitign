@@ -38,7 +38,7 @@
   <header>
     <div class="page">
       <h1>gitign</h1>
-      <p class="tagline">Add Git ignore patterns and stop tracking matching files without deleting the files from your computer.</p>
+      <p class="tagline">Add Git ignore patterns, stop tracking matching files, and optionally delete them locally.</p>
       <span class="pill">Bash</span><span class="pill">Git</span><span class="pill">macOS / Zsh</span>
     </div>
   </header>
@@ -47,17 +47,17 @@
     <h2>What it does</h2>
     <div class="grid">
       <article class="card"><h3>Writes patterns</h3><p>Adds each supplied pattern to the repository root’s <code>.gitignore</code>, without adding duplicates.</p></article>
-      <article class="card"><h3>Untracks and commits</h3><p>Runs <code>git rm --cached</code> for matching tracked files, then commits by default. Files remain on disk.</p></article>
+      <article class="card"><h3>Untracks and commits</h3><p>Runs <code>git rm --cached</code> for matching tracked files, can delete them locally on request, and commits by default.</p></article>
       <article class="card"><h3>Finds the repository</h3><p>Works from subfolders and asks for a repository path or <code>init</code> when needed.</p></article>
     </div>
 
     <h2>Install</h2>
     <p>Clone the repository into any editable directory, then run its installer. On macOS, keeping it in <code>~/Library/Application Support/gitign</code> is recommended, but not required.</p>
-    <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">git clone https://github.com/shlok-k720/gitign.git ~/gitign</span>
+    <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">git clone https://github.com/AlphaGo729/gitign.git ~/gitign</span>
 <span class="prompt">$</span> <span class="cmd">bash ~/gitign/compile-gitign.sh</span>
 <span class="prompt">$</span> <span class="cmd">source ~/.zshrc</span>
 <span class="comment"># gitign is now available on your PATH</span></pre></div>
-    <p>The installer makes <code>~/.local/bin/gitign</code> point to the editable <code>gitignore.sh</code> source and adds <code>~/.local/bin</code> to <code>PATH</code> in <code>~/.zshrc</code>. Pulling updates in the clone updates the command.</p>
+    <p>The installer copies the command to <code>~/.local/bin/gitign</code> and adds <code>~/.local/bin</code> to <code>PATH</code> in <code>~/.zshrc</code>. Re-run the installer after pulling updates in the clone.</p>
 
     <h2>Quick start</h2>
     <p>Run <code>gitign</code> from any directory within a Git working tree.</p>
@@ -68,6 +68,7 @@
 <span class="comment"># Adds **/node_modules/ and untracks tracked dependencies</span>
 
 <span class="prompt">$</span> <span class="cmd">gitign</span> <span class="string">database.db</span>
+<span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--delete_local</span> <span class="string">build/</span>
 <span class="prompt">$</span> <span class="cmd">gitign</span> <span class="string">'*/tmp.js'</span>
 <span class="prompt">$</span> <span class="cmd">gitign</span> <span class="string">build/</span></pre></div>
 
@@ -83,6 +84,15 @@
     </table>
     <div class="callout"><strong>Quote glob patterns.</strong> In Zsh, quote arguments containing <code>*</code>, <code>?</code>, <code>[</code>, or <code>!</code> so the shell does not expand them before <code>gitign</code> receives them.</div>
     <p>Patterns are relative to the directory where you run <code>gitign</code>. A pattern beginning with <code>/</code> is relative to the repository root instead.</p>
+
+    <h2>Deleting local files</h2>
+    <p><code>--delete_local</code> is off by default. Use it when you want <code>gitign</code> to remove matching files and directories from your working tree after ignoring them.</p>
+    <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--delete_local</span> <span class="string">build/</span>
+<span class="comment"># Ignores build/ and deletes the local build directory.</span>
+
+<span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--delete_local</span> <span class="string">nodemodules</span>
+<span class="comment"># Ignores node_modules recursively and removes local node_modules folders.</span></pre></div>
+    <p>This is permanent local deletion, so leave the flag off when you only want Git to stop tracking the files.</p>
 
     <h2>Automatic commits</h2>
     <p><code>gitign</code> commits its own changes by default, using <code>gitign: ignore &lt;pattern&gt;</code> for one pattern or <code>gitign: ignore N patterns</code> for several.</p>
@@ -108,7 +118,7 @@ No .gitignore found. Enter a path inside this repository, or type init to create
       <div class="arrow">→</div>
       <div class="step"><strong>2. Normalize pattern</strong><br>Presets expand and subfolder paths are scoped.</div>
       <div class="arrow">→</div>
-      <div class="step"><strong>3. Update Git</strong><br>Append to <code>.gitignore</code>, remove matching index entries, then commit.</div>
+      <div class="step"><strong>3. Update Git</strong><br>Append to <code>.gitignore</code>, optionally delete local matches, remove matching index entries, then commit.</div>
     </div>
     <p>The central logic is intentionally small:</p>
     <div class="terminal"><pre><span class="comment"># Expand friendly preset names into Git ignore patterns.</span>
@@ -118,7 +128,7 @@ No .gitignore found. Enter a path inside this repository, or type init to create
   *)             pattern=<span class="string">"$argument"</span> ;;
 <span class="cmd">esac</span>
 
-<span class="comment"># Keep matching files locally but remove them from Git's index.</span>
+<span class="comment"># Optionally delete local files, then remove tracked matches from Git's index.</span>
 <span class="cmd">git rm</span> <span class="flag">--cached -r --ignore-unmatch</span> <span class="flag">--</span> <span class="string">"${tracked_paths[@]}"</span></pre></div>
 
     <h2>Reviewing instead of committing</h2>
@@ -132,6 +142,6 @@ No .gitignore found. Enter a path inside this repository, or type init to create
   <p>Use <code>gitign --help</code> to see all available options and usage instructions.</p>
   <p><code>gitign --version</code> shows the version which is currently installed.</p>
 </main>
-  <footer><div class="page">gitign — <a href="https://github.com/shlok-k720/gitign/">Access Github Repo</a> · Made with ❤️ by  <a href="https://github.com/shlok-k720/">Shlok Khandelwal</a></div></footer>
+  <footer><div class="page">gitign — <a href="https://github.com/AlphaGo729/gitign/">Access GitHub Repo</a></div></footer>
 </body>
 </html>

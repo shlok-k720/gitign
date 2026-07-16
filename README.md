@@ -1,6 +1,6 @@
 # gitign
 
-`gitign` adds Git ignore patterns, removes matching files from Git tracking without deleting them locally, and commits those changes by default.
+`gitign` adds Git ignore patterns, removes matching files from Git tracking, optionally deletes those files locally, and commits those changes by default.
 
 ## Install
 
@@ -9,7 +9,7 @@ Requirements: Git, Bash, and Zsh. The installer puts the `gitign` command in `~/
 Clone the repository anywhere you can edit it:
 
 ```sh
-git clone https://github.com/shlok-k720/gitign.git ~/gitign
+git clone https://github.com/AlphaGo729/gitign.git ~/gitign
 cd ~/gitign
 bash compile-gitign.sh
 source ~/.zshrc
@@ -18,13 +18,13 @@ source ~/.zshrc
 Keeping the clone in `~/Library/Application Support/gitign` is recommended on macOS because it separates this user-level tool from project folders:
 
 ```sh
-git clone https://github.com/shlok-720/gitign.git \
+git clone https://github.com/AlphaGo729/gitign.git \
   "$HOME/Library/Application Support/gitign"
 bash "$HOME/Library/Application Support/gitign/compile-gitign.sh"
 source ~/.zshrc
 ```
 
-The installer creates `~/.local/bin/gitign` as a symlink to `gitignore.sh`, so pulling updates in the clone updates the command.
+The installer creates `~/.local/bin/gitign` as a standalone copied command. Re-run `bash compile-gitign.sh` after pulling updates in the clone to refresh the installed command.
 
 ## Use
 
@@ -37,6 +37,7 @@ gitign database.db
 gitign '*/tmp.js'
 gitign build/
 gitign '**/*.log'
+gitign --delete_local build/
 ```
 
 Arguments are Git ignore patterns relative to the directory where you run `gitign`; each is written to the repository root's `.gitignore`. A leading `/` makes a pattern relative to the repository root.
@@ -56,6 +57,17 @@ gitign --version
 gitign --help
 ```
 
+## Local deletion
+
+Pass `--delete_local` to remove matching local files and directories after they have been ignored:
+
+```sh
+gitign --delete_local build/
+gitign --delete_local nodemodules
+gitign --delete_local '**/*.log'
+```
+
+By default, `gitign` keeps your local files. `--delete_local` is opt-in because it permanently removes matching local content from the working tree.
 
 ## Automatic commits
 
@@ -89,7 +101,8 @@ If that repository has no root `.gitignore`, it prompts for a path inside the re
 1. Git resolves the working tree, repository root, and relative directory where the command was called.
 2. Presets expand into normal Git ignore patterns, and duplicate patterns are not appended.
 3. `git ls-files -ci --exclude=<pattern>` finds tracked files that now match.
-4. `git rm --cached` removes those files only from Git's index.
-5. Unless `--no-auto-commit` is given, Git commits the `.gitignore` update and the files that `gitign` untracked. It first requires a clean staging area, so no unrelated staged changes are included.
+4. If `--delete_local` is given, `gitign` deletes matching local files and directories after they become ignored.
+5. `git rm --cached` removes tracked matches from Git's index.
+6. Unless `--no-auto-commit` is given, Git commits the `.gitignore` update and the files that `gitign` untracked. It first requires a clean staging area, so no unrelated staged changes are included.
 
-The files remain on your computer throughout this process.
+Without `--delete_local`, the files remain on your computer throughout this process.

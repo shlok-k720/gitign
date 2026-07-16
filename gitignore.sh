@@ -3,15 +3,16 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: gitign [--auto-commit | --no-auto-commit] <pattern> [pattern...]
+Usage: gitign [--auto-commit | --no-auto-commit] [--delete_local] <pattern> [pattern...]
 
 Add Git ignore patterns relative to the directory where this command is run,
-then stop tracking matching files without deleting them locally. Changes are
-committed by default.
+then stop tracking matching files. Local files stay in place unless
+--delete_local is provided. Changes are committed by default.
 
 Options:
   --auto-commit     Commit gitign's changes (default).
   --no-auto-commit  Leave gitign's changes for review and manual commit.
+  --delete_local    Delete matching local files and directories after ignoring them.
   --help            Show this help.
   --version         Show the version of gitign.
 
@@ -25,7 +26,31 @@ version() {
     printf 'gitign version %s\n' "$VERSION_STRING"
 }
 
+delete_local_matches() {
+    local pattern="$1"
+    local delete_paths=()
+    local source=""
+    local line_number=""
+    local matched_pattern=""
+    local path=""
+
+    while IFS= read -r -d '' source \
+        && IFS= read -r -d '' line_number \
+        && IFS= read -r -d '' matched_pattern \
+        && IFS= read -r -d '' path; do
+        if [[ "$source" == ".gitignore" && "$matched_pattern" == "$pattern" && "$path" != "./.gitignore" ]]; then
+            delete_paths+=("$path")
+        fi
+    done < <((find . -mindepth 1 -path './.git' -prune -o -print0 \
+        | git check-ignore -z -v --stdin --no-index) || true)
+
+    if ((${#delete_paths[@]})); then
+        rm -rf -- "${delete_paths[@]}"
+    fi
+}
+
 auto_commit=true
+delete_local=false
 patterns=()
 
 for argument in "$@"; do
@@ -39,6 +64,9 @@ for argument in "$@"; do
             ;;
         --no-auto-commit)
             auto_commit=false
+            ;;
+        --delete_local)
+            delete_local=true
             ;;
         --help)
             usage
@@ -156,6 +184,10 @@ for argument in "${patterns[@]}"; do
     if ((${#tracked_paths[@]})); then
         git rm --cached -r --ignore-unmatch -- "${tracked_paths[@]}"
         affected_paths+=("${tracked_paths[@]}")
+    fi
+
+    if "$delete_local"; then
+        delete_local_matches "$pattern"
     fi
 done
 
