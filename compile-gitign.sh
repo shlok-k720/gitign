@@ -8,19 +8,39 @@ command_path="$bin_dir/gitign"
 zshrc="$HOME/.zshrc"
 path_marker="# gitign command"
 
+version_file="$script_dir/VERSION.txt"
+
 if [[ ! -f "$source_script" ]]; then
     printf 'gitign installer: missing %s\n' "$source_script" >&2
     exit 1
 fi
 
-if [[ -e "$command_path" && ! -L "$command_path" ]]; then
-    printf 'gitign installer: %s already exists and is not a symlink.\n' "$command_path" >&2
+if [[ ! -f "$version_file" ]]; then
+    printf 'gitign installer: missing %s\n' "$version_file" >&2
+    exit 1
+fi
+
+version="$(<"$version_file")"
+if [[ -z "$version" || "$version" == *$'\n'* || "$version" == *'"'* || "$version" == *'\\'* ]]; then
+    printf 'gitign installer: %s must contain one plain version string.\n' "$version_file" >&2
     exit 1
 fi
 
 mkdir -p "$bin_dir"
-chmod +x "$source_script"
-ln -sfn "$source_script" "$command_path"
+
+if [[ -e "$command_path" || -L "$command_path" ]]; then
+    rm "$command_path"
+fi
+
+# Copy the file to the target location instead of creating a symlink.
+cp "$source_script" "$command_path"
+
+# Inject the real version string directly into the deployed file
+# Works on both Linux and macOS
+sed -i.bak -E "s/^(VERSION_STRING=).*/\1\"$version\"/" "$command_path"
+rm -f "${command_path}.bak"
+
+chmod +x "$command_path"
 
 touch "$zshrc"
 if ! grep -Fqx -- "$path_marker" "$zshrc"; then
@@ -34,5 +54,5 @@ esac
 EOF
 fi
 
-printf 'Installed gitign version %s at %s\n' "$(cat "$script_dir/VERSION")" "$command_path"
+printf 'Installed gitign version %s at %s\n' "$version" "$command_path"
 printf 'Run: source ~/.zshrc\n'

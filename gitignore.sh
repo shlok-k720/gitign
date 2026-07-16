@@ -20,9 +20,9 @@ Presets:
   nodemodules Ignore node_modules directories in this directory and all subdirectories.
 EOF
 }
-
+VERSION_STRING="will-be-overrided"
 version() {
-    printf 'gitign version %s\n' "$(cat "$(dirname "$0")/VERSION.txt")"
+    printf 'gitign version %s\n' "$VERSION_STRING"
 }
 
 auto_commit=true
