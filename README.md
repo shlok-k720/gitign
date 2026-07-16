@@ -1,5 +1,7 @@
 # gitign
 
+Latest version: <!-- VERSION -->v0.0.0
+
 `gitign` adds Git ignore rules, stops tracking matching files, and optionally deletes, trashes, or backs up local matches. It previews every resolved pattern before changing anything and automatically commits repository changes by default.
 
 ## Install
