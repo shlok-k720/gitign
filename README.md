@@ -50,6 +50,13 @@ Arguments are Git ignore patterns relative to the directory where you run `gitig
 
 Quote patterns containing `*`, `?`, `[`, or `!` so your shell passes the pattern to `gitign` instead of expanding it first.
 
+Other commands:
+```sh
+gitign --version
+gitign --help
+```
+
+
 ## Automatic commits
 
 `gitign` commits its `.gitignore` and matching untracking changes by default:

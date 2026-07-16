@@ -13,6 +13,7 @@ Options:
   --auto-commit     Commit gitign's changes (default).
   --no-auto-commit  Leave gitign's changes for review and manual commit.
   --help            Show this help.
+  --version         Show the version of gitign.
 
 Presets:
   dsstore    Ignore .DS_Store in this directory and all of its subdirectories.
@@ -20,11 +21,19 @@ Presets:
 EOF
 }
 
+version() {
+    printf 'gitign version %s\n' "$(cat "$(dirname "$0")/VERSION.txt")"
+}
+
 auto_commit=true
 patterns=()
 
 for argument in "$@"; do
     case "$argument" in
+        --version)
+            version
+            exit 0
+            ;;
         --auto-commit)
             auto_commit=true
             ;;

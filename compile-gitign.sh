@@ -34,5 +34,5 @@ esac
 EOF
 fi
 
-printf 'Installed gitign at %s\n' "$command_path"
+printf 'Installed gitign version %s at %s\n' "$(cat "$script_dir/VERSION")" "$command_path"
 printf 'Run: source ~/.zshrc\n'
