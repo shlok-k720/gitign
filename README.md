@@ -1,6 +1,6 @@
 # gitign
 
-Latest version: <!-- VERSION -->v1.1.1
+Latest version: <!-- VERSION -->v1.1.2
 
 `gitign` adds Git ignore rules, stops tracking matching files, and optionally deletes, trashes, or backs up local matches. It previews every resolved pattern before changing anything and automatically commits repository changes by default.
 
