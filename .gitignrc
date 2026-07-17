@@ -1,0 +1,12 @@
+# gitign configuration
+# Command-line options override these values.
+auto_commit=true
+delete_local=false
+deletion_mode=keep
+backup_dir=
+recursive_filenames=false
+global_ignore=false
+confirm=true
+verbose=false
+quiet=false
+commit_message=
