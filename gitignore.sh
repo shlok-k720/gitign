@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-VERSION_STRING="1.1.1"
+VERSION_STRING="1.1.2"
 
 usage() {
     cat <<'EOF'
