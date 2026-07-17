@@ -81,6 +81,60 @@ test_dry_run_and_recursive_config() {
     pass 'dry run and repository-local recursive filename configuration'
 }
 
+test_config_initialization() {
+    local config_directory="$workspace/config-init"
+    local repository="$workspace/current-directory-config"
+    local checksum_before=""
+
+    mkdir -p "$config_directory"
+    (
+        cd "$config_directory"
+        "$gitign" --init >/dev/null
+    )
+    grep -Fqx 'auto_commit=true' "$config_directory/.gitignrc"
+    grep -Fqx 'delete_local=false' "$config_directory/.gitignrc"
+    grep -Fqx 'deletion_mode=keep' "$config_directory/.gitignrc"
+    grep -Fqx 'backup_dir=' "$config_directory/.gitignrc"
+    grep -Fqx 'recursive_filenames=false' "$config_directory/.gitignrc"
+    grep -Fqx 'global_ignore=false' "$config_directory/.gitignrc"
+    grep -Fqx 'confirm=true' "$config_directory/.gitignrc"
+    grep -Fqx 'verbose=false' "$config_directory/.gitignrc"
+    grep -Fqx 'quiet=false' "$config_directory/.gitignrc"
+    grep -Fqx 'commit_message=' "$config_directory/.gitignrc"
+    checksum_before="$(cksum "$config_directory/.gitignrc")"
+    ! (
+        cd "$config_directory"
+        "$gitign" --init >/dev/null 2>&1
+    )
+    [[ "$(cksum "$config_directory/.gitignrc")" == "$checksum_before" ]]
+    ! (
+        cd "$config_directory"
+        "$gitign" --auto-commit >/dev/null 2>&1
+    )
+
+    new_repository "$repository"
+    mkdir -p "$repository/nested"
+    (
+        cd "$repository/nested"
+        "$gitign" --init >/dev/null
+    )
+    awk '
+        /^auto_commit=/ { print "auto_commit=false"; next }
+        { print }
+    ' "$repository/nested/.gitignrc" > "$repository/nested/.gitignrc.tmp"
+    mv "$repository/nested/.gitignrc.tmp" "$repository/nested/.gitignrc"
+    touch "$repository/nested/current-directory.db"
+    git -C "$repository" add .
+    git -C "$repository" commit -qm initial
+    (
+        cd "$repository/nested"
+        printf 'init\n' | "$gitign" current-directory.db >/dev/null
+    )
+    [[ "$(git -C "$repository" log -1 --format=%s)" == initial ]]
+    grep -Fqx 'nested/current-directory.db' "$repository/.gitignore"
+    pass 'default config initialization, non-replacement, and current-directory precedence'
+}
+
 test_preflight_guards() {
     local repository="$workspace/guards"
     new_repository "$repository"
@@ -383,6 +437,7 @@ bash -n "$installer"
 bash -n "$release_tool"
 test_auto_commit_and_noop
 test_dry_run_and_recursive_config
+test_config_initialization
 test_preflight_guards
 test_precise_delete_backup_trash_and_undo
 test_linux_and_windows_trash_adapters

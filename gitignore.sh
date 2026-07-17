@@ -7,13 +7,13 @@ usage() {
     cat <<'EOF'
 Usage:
   gitign [options] <pattern> [pattern...]
+  gitign --init
   gitign --undo [--dry-run]
 
 Add Git ignore patterns, untrack matching files, and optionally handle their
 local copies. Patterns are relative to the directory where gitign is called.
 
 Safety and commits:
-  --auto-commit              Commit gitign's changes (default).
   --no-auto-commit           Leave changes for review and manual commit.
   --commit-message MESSAGE   Use MESSAGE for the automatic commit.
   --delete_local             Permanently delete matching local files/directories.
@@ -31,6 +31,7 @@ Output:
   --quiet                    Suppress normal output.
   --yes                      Skip interactive confirmation prompts.
   --help                     Show this help.
+  --init                     Create a default .gitignrc in the current directory.
   --version                  Show the installed version.
 
 Presets:
@@ -38,11 +39,35 @@ Presets:
 
 Examples:
   gitign nodemodules
+  gitign --init
   gitign --recursive-filenames database.db
   gitign --no-auto-commit --delete_local build/
   gitign --backup-dir ../gitign-backups '**/*.log'
   gitign --dry-run --global env
 EOF
+}
+
+initialize_config() {
+    local destination="$initial_directory/.gitignrc"
+
+    [[ ! -e "$destination" ]] || die "$destination already exists; it was not replaced."
+
+    cat > "$destination" <<'EOF'
+# gitign configuration
+# Command-line options override these values.
+auto_commit=true
+delete_local=false
+deletion_mode=keep
+backup_dir=
+recursive_filenames=false
+global_ignore=false
+confirm=true
+verbose=false
+quiet=false
+commit_message=
+EOF
+
+    success "Created default configuration: $destination"
 }
 
 color_enabled=false
@@ -226,7 +251,10 @@ load_config() {
     local key=""
     local value=""
 
-    config_file="$repo_root/.gitignrc"
+    config_file="$initial_directory/.gitignrc"
+    if [[ ! -f "$config_file" && "$initial_directory" != "$repo_root" ]]; then
+        config_file="$repo_root/.gitignrc"
+    fi
     [[ -f "$config_file" ]] || return 0
 
     while IFS= read -r line || [[ -n "$line" ]]; do
@@ -985,6 +1013,7 @@ backup_dir=""
 commit_message=""
 dry_run=false
 undo=false
+initialize_config_file=false
 patterns=()
 
 cli_auto_commit=""
@@ -1009,7 +1038,6 @@ config_commit_message=""
 
 while (($#)); do
     case "$1" in
-        --auto-commit) cli_auto_commit=true ;;
         --no-auto-commit) cli_auto_commit=false ;;
         --delete_local|--delete-local) cli_deletion_mode=delete ;;
         --trash) cli_deletion_mode=trash ;;
@@ -1035,6 +1063,7 @@ while (($#)); do
         --no-global) cli_global_ignore=false ;;
         --dry-run) dry_run=true ;;
         --undo) undo=true ;;
+        --init) initialize_config_file=true ;;
         --yes) assume_yes=true ;;
         --verbose) cli_verbose=true; cli_quiet=false ;;
         --quiet) cli_quiet=true; cli_verbose=false ;;
@@ -1051,6 +1080,15 @@ while (($#)); do
     shift
 done
 
+initial_directory="$(pwd -P)"
+
+if "$initialize_config_file" && { "$undo" || "$dry_run" || ((${#patterns[@]})); }; then
+    die '--init cannot be combined with patterns, --undo, or --dry-run.'
+fi
+if "$initialize_config_file"; then
+    initialize_config
+    exit 0
+fi
 if "$undo" && ((${#patterns[@]})); then
     die '--undo cannot be combined with ignore patterns.'
 fi
@@ -1059,7 +1097,6 @@ if ! "$undo" && ((${#patterns[@]} == 0)); then
     exit 2
 fi
 
-initial_directory="$(pwd -P)"
 repo_root=""
 called_from=""
 git_directory=""

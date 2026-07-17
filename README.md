@@ -79,7 +79,6 @@ Quote patterns containing `*`, `?`, `[`, or `!` so the shell passes them to `git
 
 | Option | Default | Behavior |
 | --- | --- | --- |
-| `--auto-commit` | enabled | Commit gitign's repository changes. |
 | `--no-auto-commit` | disabled | Leave the ignore and untracking changes for review. |
 | `--commit-message TEXT` | generated | Use `TEXT` for the automatic commit. |
 | `--delete_local` | disabled | Permanently delete precisely matched local files/directories. |
@@ -87,6 +86,7 @@ Quote patterns containing `*`, `?`, `[`, or `!` so the shell passes them to `git
 | `--backup-dir DIR` | disabled | Move matches into `DIR`, preserving their relative paths. |
 | `--dry-run` | disabled | Show the plan without changing files, Git config, or commits. |
 | `--undo` | n/a | Undo the latest recorded gitign action when it is safe. |
+| `--init` | n/a | Create a default `.gitignrc` in the current directory. |
 | `--recursive-filenames` | disabled | Turn a bare filename such as `database.db` into `**/database.db`. |
 | `--global` | disabled | Add rules to Git's global ignore file rather than repository `.gitignore`. |
 | `--verbose` | disabled | List every planned match. |
@@ -174,17 +174,32 @@ Use `gitign --dry-run --undo` to preview the undo plan.
 
 ## Repository configuration
 
-Place `.gitignrc` in a repository root to set defaults. Command-line options override configuration.
+Run `gitign --init` in the directory where you want a complete default `.gitignrc`:
 
 ```ini
-# .gitignrc
-auto_commit=false
-recursive_filenames=true
-deletion_mode=backup
-backup_dir=../gitign-backups
+gitign --init
+```
+
+It creates:
+
+```ini
+# gitign configuration
+# Command-line options override these values.
+auto_commit=true
+delete_local=false
+deletion_mode=keep
+backup_dir=
+recursive_filenames=false
+global_ignore=false
 confirm=true
 verbose=false
+quiet=false
+commit_message=
 ```
+
+`--init` never overwrites an existing `.gitignrc`; edit that file directly when you want to change defaults.
+
+Gitign loads a `.gitignrc` in the current directory first, then falls back to the repository root. Command-line options override configuration; `--no-auto-commit` remains the opt-out because automatic commits are enabled by default.
 
 Supported keys:
 

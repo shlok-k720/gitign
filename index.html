@@ -101,13 +101,20 @@
 
     <section id="config">
       <h2>Repository configuration and global rules</h2>
-      <p>Put a <code>.gitignrc</code> file at the repository root to set reusable defaults; command-line options win.</p>
-      <div class="terminal"><pre><span class="comment"># .gitignrc</span>
-<span class="cmd">auto_commit</span>=<span class="string">false</span>
-<span class="cmd">recursive_filenames</span>=<span class="string">true</span>
-<span class="cmd">deletion_mode</span>=<span class="string">backup</span>
-<span class="cmd">backup_dir</span>=<span class="string">../gitign-backups</span>
-<span class="cmd">confirm</span>=<span class="string">true</span></pre></div>
+      <p>Run <code>gitign --init</code> in the directory where you want a complete default <code>.gitignrc</code>. Gitign loads a current-directory config first, then falls back to the repository root; command-line options win.</p>
+      <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--init</span>
+<span class="comment"># .gitignrc</span>
+<span class="cmd">auto_commit</span>=<span class="string">true</span>
+<span class="cmd">delete_local</span>=<span class="string">false</span>
+<span class="cmd">deletion_mode</span>=<span class="string">keep</span>
+<span class="cmd">backup_dir</span>=<span class="string"></span>
+<span class="cmd">recursive_filenames</span>=<span class="string">false</span>
+<span class="cmd">global_ignore</span>=<span class="string">false</span>
+<span class="cmd">confirm</span>=<span class="string">true</span>
+<span class="cmd">verbose</span>=<span class="string">false</span>
+<span class="cmd">quiet</span>=<span class="string">false</span>
+<span class="cmd">commit_message</span>=<span class="string"></span></pre></div>
+      <p><code>--init</code> never overwrites an existing <code>.gitignrc</code>; edit the file directly when you want different defaults.</p>
       <p>Supported keys: <code>auto_commit</code>, <code>delete_local</code>, <code>deletion_mode</code>, <code>backup_dir</code>, <code>recursive_filenames</code>, <code>global_ignore</code>, <code>confirm</code>, <code>verbose</code>, <code>quiet</code>, and <code>commit_message</code>.</p>
       <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--global</span> <span class="string">env</span>
 <span class="comment"># Writes to Git's configured global excludes file, creating ~/.config/git/ignore if needed.</span></pre></div>
