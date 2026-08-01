@@ -65,10 +65,12 @@ Run `gitign` from any directory inside a Git working tree:
 
 ```sh
 gitign nodemodules
+gitign secrets
 gitign dsstore
 gitign database.db
 gitign '*/tmp.js'
 gitign build/
+gitign reverse secrets
 ```
 
 `gitign` shows the resolved ignore pattern and the number of tracked/local matches before it applies an action. Patterns are relative to the directory where the command is run. Prefix a pattern with `/` to make it relative to the repository root.
@@ -96,6 +98,12 @@ Quote patterns containing `*`, `?`, `[`, or `!` so the shell passes them to `git
 
 Both `--delete_local` and `--delete-local` are accepted.
 
+Subcommand:
+
+| Command | Behavior |
+| --- | --- |
+| `gitign reverse PATTERN...` | Remove the matching ignore rule(s) that `gitign` would add for `PATTERN...`, then re-track current matching paths. |
+
 On Windows Git Bash and WSL, `--backup-dir` accepts either a POSIX path or a drive-letter path such as `C:\Users\you\gitign-backups`; gitign converts the latter before moving files.
 
 ## Presets
@@ -111,11 +119,13 @@ On Windows Git Bash and WSL, `--backup-dir` accepts either a POSIX path or a dri
 | `vscode` | `.vscode/` |
 | `idea` | `.idea/` |
 | `pythoncache` | `**/__pycache__/` |
+| `secrets` | Expands to common secret and local-database patterns such as `**/.env`, `**/*.db`, `**/*.sqlite3`, `**/*.pem`, and `**/secrets.yaml`. |
 
 For example:
 
 ```sh
 gitign nodemodules env
+gitign secrets
 gitign --recursive-filenames database.db
 gitign --global dsstore
 ```
@@ -172,6 +182,15 @@ For an automatic commit, undo creates a Git revert and only runs when the gitign
 
 Use `gitign --dry-run --undo` to preview the undo plan.
 
+`gitign reverse ...` is different: it reverses the specific command you name now, instead of the most recent recorded transaction. It removes the corresponding ignore rule(s) and re-tracks any current matching paths:
+
+```sh
+gitign reverse secrets
+gitign reverse '**/*.log'
+```
+
+`reverse` works on current paths that still exist locally. It does not recover files that were permanently deleted, trashed, or moved to a backup directory by an earlier command.
+
 ## Repository configuration
 
 Run `gitign --init` in the directory where you want a complete default `.gitignrc`:
@@ -226,12 +245,13 @@ Outside a repository, gitign asks for an existing repository path or `init` to r
 
 1. Resolves the Git repository and loads optional `.gitignrc` defaults.
 2. Expands presets and optional recursive filename patterns.
-3. Previews exact resolved rules plus tracked/local candidate counts.
-4. Adds rules to repository or global ignore configuration.
-5. Uses `git rm --cached` to remove matching tracked entries without deleting them by default.
-6. When requested, uses Git's ignore matcher to precisely select local paths for deletion, backup, or OS-specific Trash handling.
-7. Records the action under `.git/gitign/` for one-step undo.
-8. Commits the staged repository changes only when auto-commit is enabled and the staging area was initially clean.
+3. In `reverse` mode, removes the matching ignore rule instead of appending it.
+4. Previews exact resolved rules plus tracked/local candidate counts.
+5. Adds rules to repository or global ignore configuration.
+6. Uses `git rm --cached` to remove matching tracked entries without deleting them by default.
+7. When requested, uses Git's ignore matcher to precisely select local paths for deletion, backup, or OS-specific Trash handling.
+8. Records the action under `.git/gitign/` for one-step undo.
+9. Commits the staged repository changes only when auto-commit is enabled and the staging area was initially clean.
 
 ## Development and releases (only for developer)
 

@@ -135,6 +135,39 @@ test_config_initialization() {
     pass 'default config initialization, non-replacement, and current-directory precedence'
 }
 
+test_secrets_and_reverse() {
+    local repository="$workspace/secrets"
+    new_repository "$repository"
+    mkdir -p "$repository/config"
+    touch "$repository/.env" "$repository/app.db" "$repository/config/secrets.yaml" "$repository/keep.txt"
+    git -C "$repository" add keep.txt
+    git -C "$repository" add -f .env app.db config/secrets.yaml
+    git -C "$repository" commit -qm initial
+
+    (
+        cd "$repository"
+        printf 'init\n' | "$gitign" --yes secrets >/dev/null
+    )
+    grep -Fqx '**/.env' "$repository/.gitignore"
+    grep -Fqx '**/*.db' "$repository/.gitignore"
+    grep -Fqx '**/secrets.yaml' "$repository/.gitignore"
+    [[ -z "$(git -C "$repository" ls-files -- .env app.db config/secrets.yaml)" ]]
+
+    (
+        cd "$repository"
+        "$gitign" reverse --yes --no-auto-commit secrets >/dev/null
+    )
+    ! grep -Fqx '**/.env' "$repository/.gitignore"
+    ! grep -Fqx '**/*.db' "$repository/.gitignore"
+    ! grep -Fqx '**/secrets.yaml' "$repository/.gitignore"
+    git -C "$repository" ls-files --error-unmatch .env app.db config/secrets.yaml >/dev/null
+    ! (
+        cd "$repository"
+        "$gitign" reverse --delete_local secrets >/dev/null 2>&1
+    )
+    pass 'secrets preset and reverse subcommand'
+}
+
 test_preflight_guards() {
     local repository="$workspace/guards"
     new_repository "$repository"
@@ -438,6 +471,7 @@ bash -n "$release_tool"
 test_auto_commit_and_noop
 test_dry_run_and_recursive_config
 test_config_initialization
+test_secrets_and_reverse
 test_preflight_guards
 test_precise_delete_backup_trash_and_undo
 test_linux_and_windows_trash_adapters

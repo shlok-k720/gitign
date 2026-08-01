@@ -7,6 +7,7 @@ usage() {
     cat <<'EOF'
 Usage:
   gitign [options] <pattern> [pattern...]
+  gitign reverse [options] <pattern> [pattern...]
   gitign --init
   gitign --undo [--dry-run]
 
@@ -35,10 +36,12 @@ Output:
   --version                  Show the installed version.
 
 Presets:
-  dsstore, nodemodules, env, logs, coverage, dist, vscode, idea, pythoncache
+  dsstore, nodemodules, env, logs, coverage, dist, vscode, idea, pythoncache, secrets
 
 Examples:
   gitign nodemodules
+  gitign secrets
+  gitign reverse secrets
   gitign --init
   gitign --recursive-filenames database.db
   gitign --no-auto-commit --delete_local build/
@@ -201,6 +204,30 @@ expand_preset() {
         idea) printf '%s' '.idea/' ;;
         pythoncache) printf '%s' '**/__pycache__/' ;;
         *) printf '%s' "$1" ;;
+    esac
+}
+
+expand_argument_patterns() {
+    case "$1" in
+        secrets)
+            printf '%s\0' \
+                '**/.env' \
+                '**/.env.*' \
+                '**/*.env' \
+                '**/*.db' \
+                '**/*.sqlite' \
+                '**/*.sqlite3' \
+                '**/*.pem' \
+                '**/*.key' \
+                '**/*.p12' \
+                '**/*.pfx' \
+                '**/secrets.json' \
+                '**/secrets.yml' \
+                '**/secrets.yaml'
+            ;;
+        *)
+            printf '%s\0' "$(expand_preset "$1")"
+            ;;
     esac
 }
 
@@ -405,25 +432,42 @@ resolve_patterns() {
     local argument=""
     local pattern=""
     local resolved_patterns=()
+    local expanded_pattern=""
 
     for argument in "${patterns[@]}"; do
         validate_pattern "$argument"
-        pattern="$(expand_preset "$argument")"
-        if "$recursive_filenames" \
-            && [[ "$pattern" != */* ]] \
-            && [[ "$pattern" != *'*'* && "$pattern" != *'?'* && "$pattern" != *'['* ]]; then
-            pattern="**/$pattern"
-        fi
+        while IFS= read -r -d '' expanded_pattern; do
+            pattern="$expanded_pattern"
+            if "$recursive_filenames" \
+                && [[ "$pattern" != */* ]] \
+                && [[ "$pattern" != *'*'* && "$pattern" != *'?'* && "$pattern" != *'['* ]]; then
+                pattern="**/$pattern"
+            fi
 
-        if ! "$global_ignore" && [[ "$pattern" != /* && -n "$called_from" ]]; then
-            pattern="$called_from/$pattern"
-        fi
+            if ! "$global_ignore" && [[ "$pattern" != /* && -n "$called_from" ]]; then
+                pattern="$called_from/$pattern"
+            fi
 
-        if ((${#resolved_patterns[@]} == 0)) || ! array_contains "$pattern" "${resolved_patterns[@]}"; then
-            resolved_patterns+=("$pattern")
-        fi
+            if ((${#resolved_patterns[@]} == 0)) || ! array_contains "$pattern" "${resolved_patterns[@]}"; then
+                resolved_patterns+=("$pattern")
+            fi
+        done < <(expand_argument_patterns "$argument")
     done
     patterns=("${resolved_patterns[@]}")
+}
+
+prepare_reverse_ignore_target() {
+    ignore_target=repository
+    if "$global_ignore"; then
+        ignore_target=global
+        resolve_global_ignore_file
+        ignore_file="$global_ignore_file"
+        canonical_ignore_file="$ignore_file"
+        return
+    fi
+
+    ignore_file="$repo_root/.gitignore"
+    canonical_ignore_file="$ignore_file"
 }
 
 collect_tracked_matches() {
@@ -853,6 +897,33 @@ preview_plan() {
     fi
 }
 
+preview_reverse_plan() {
+    local pattern=""
+    local pattern_exists=false
+    local total_retrack=0
+    local path=""
+
+    for pattern in "${patterns[@]}"; do
+        pattern_exists=false
+        [[ -f "$ignore_file" ]] && grep -Fqx -- "$pattern" "$ignore_file" && pattern_exists=true
+        collect_precise_deletion_matches "$pattern"
+        total_retrack=$((total_retrack + ${#deletion_paths[@]}))
+
+        info "Reverse pattern: $pattern ($("$pattern_exists" && printf 'will remove' || printf 'not present'))"
+        info "  matching local paths to re-track: ${#deletion_paths[@]}"
+        if "$verbose"; then
+            for path in "${deletion_paths[@]}"; do
+                info "    would re-track: $path"
+            done
+        fi
+    done
+
+    planned_local_count="$total_retrack"
+    if "$dry_run"; then
+        info 'Dry run: no files, ignore rules, configuration, or commits were changed.'
+    fi
+}
+
 operation_is_broad() {
     local pattern=""
     ((${#patterns[@]} > 1)) && return 0
@@ -1014,6 +1085,7 @@ commit_message=""
 dry_run=false
 undo=false
 initialize_config_file=false
+reverse_mode=false
 patterns=()
 
 cli_auto_commit=""
@@ -1035,6 +1107,11 @@ config_quiet=""
 config_deletion_mode=""
 config_backup_dir=""
 config_commit_message=""
+
+if (($# > 0)) && [[ "$1" == reverse ]]; then
+    reverse_mode=true
+    shift
+fi
 
 while (($#)); do
     case "$1" in
@@ -1092,6 +1169,9 @@ fi
 if "$undo" && ((${#patterns[@]})); then
     die '--undo cannot be combined with ignore patterns.'
 fi
+if "$reverse_mode" && "$undo"; then
+    die 'reverse cannot be combined with --undo.'
+fi
 if ! "$undo" && ((${#patterns[@]} == 0)); then
     usage >&2
     exit 2
@@ -1109,6 +1189,10 @@ if "$undo"; then
     exit 0
 fi
 
+if "$reverse_mode" && [[ "$cli_deletion_mode" != "" ]]; then
+    die 'reverse cannot be combined with local deletion or trash options.'
+fi
+
 if [[ -n "$commit_message" && "$commit_message" == *$'\n'* ]]; then
     die '--commit-message must be one line.'
 fi
@@ -1118,8 +1202,13 @@ if "$auto_commit" && ! "$dry_run" && ! git diff --cached --quiet; then
 fi
 
 resolve_patterns
-ensure_ignore_target
-preview_plan
+if "$reverse_mode"; then
+    prepare_reverse_ignore_target
+    preview_reverse_plan
+else
+    ensure_ignore_target
+    preview_plan
+fi
 
 if "$dry_run"; then
     exit 0
@@ -1129,11 +1218,15 @@ if ! "$auto_commit" && ((planned_tracked_count > 0)) && ! git diff --cached --qu
     die 'the staging area already has changes; commit or stash them before untracking files.'
 fi
 
-if [[ "$deletion_mode" != keep && "$planned_local_count" -gt 0 ]] && "$confirmation_enabled"; then
+if [[ "$deletion_mode" != keep && "$planned_local_count" -gt 0 ]] && "$confirmation_enabled" && ! "$reverse_mode"; then
     confirm "Handle local matches using --$deletion_mode?" || die 'cancelled before changing local files.'
 fi
 if "$auto_commit" && operation_is_broad && "$confirmation_enabled"; then
-    confirm 'Create an automatic commit for this broad operation?' || die 'cancelled before automatic commit.'
+    if "$reverse_mode"; then
+        confirm 'Create an automatic commit for this broad reverse operation?' || die 'cancelled before automatic commit.'
+    else
+        confirm 'Create an automatic commit for this broad operation?' || die 'cancelled before automatic commit.'
+    fi
 fi
 
 added_patterns=()
@@ -1143,41 +1236,70 @@ deleted_destinations=()
 commit_sha=""
 made_changes=false
 
-for pattern in "${patterns[@]}"; do
-    if [[ -f "$ignore_file" ]] && grep -Fqx -- "$pattern" "$ignore_file"; then
-        info "Already ignored: $pattern"
-    else
-        append_pattern "$pattern"
-        added_patterns+=("$pattern")
-        made_changes=true
-        success "Added ignore pattern: $pattern"
-    fi
-
-    collect_tracked_matches "$pattern"
-    if ((${#match_paths[@]})); then
-        git rm -q --cached -r --ignore-unmatch -- "${match_paths[@]}"
-        path_to_untrack=""
-        for path_to_untrack in "${match_paths[@]}"; do
-            add_unique_affected_path "$path_to_untrack"
-        done
-        made_changes=true
-        success "Stopped tracking ${#match_paths[@]} matching path(s)."
-    fi
-
-    if [[ "$deletion_mode" != keep ]]; then
-        collect_precise_deletion_matches "$pattern"
-        if ((${#deletion_paths[@]})); then
-            delete_local_paths
+if "$reverse_mode"; then
+    for pattern in "${patterns[@]}"; do
+        if [[ -f "$ignore_file" ]] && grep -Fqx -- "$pattern" "$ignore_file"; then
+            collect_precise_deletion_matches "$pattern"
+            remove_last_pattern "$ignore_file" "$pattern"
             made_changes=true
+            success "Removed ignore pattern: $pattern"
+            if [[ "$ignore_target" == repository ]]; then
+                added_patterns+=("$pattern")
+            fi
+            if ((${#deletion_paths[@]})); then
+                git add -A -- "${deletion_paths[@]}"
+                path_to_retrack=""
+                for path_to_retrack in "${deletion_paths[@]}"; do
+                    add_unique_affected_path "$path_to_retrack"
+                done
+                made_changes=true
+                success "Re-tracked ${#deletion_paths[@]} matching path(s)."
+            fi
+        else
+            info "Not currently ignored: $pattern"
         fi
-    fi
-done
+    done
+else
+    for pattern in "${patterns[@]}"; do
+        if [[ -f "$ignore_file" ]] && grep -Fqx -- "$pattern" "$ignore_file"; then
+            info "Already ignored: $pattern"
+        else
+            append_pattern "$pattern"
+            added_patterns+=("$pattern")
+            made_changes=true
+            success "Added ignore pattern: $pattern"
+        fi
+
+        collect_tracked_matches "$pattern"
+        if ((${#match_paths[@]})); then
+            git rm -q --cached -r --ignore-unmatch -- "${match_paths[@]}"
+            path_to_untrack=""
+            for path_to_untrack in "${match_paths[@]}"; do
+                add_unique_affected_path "$path_to_untrack"
+            done
+            made_changes=true
+            success "Stopped tracking ${#match_paths[@]} matching path(s)."
+        fi
+
+        if [[ "$deletion_mode" != keep ]]; then
+            collect_precise_deletion_matches "$pattern"
+            if ((${#deletion_paths[@]})); then
+                delete_local_paths
+                made_changes=true
+            fi
+        fi
+    done
+fi
 
 if "$auto_commit"; then
     [[ "$ignore_target" == repository ]] && git add -- .gitignore
     if ! git diff --cached --quiet; then
         if [[ -n "$commit_message" ]]; then
             :
+        elif "$reverse_mode" && ((${#patterns[@]} == 1)); then
+            commit_message="gitign: reverse ${patterns[0]}"
+        elif "$reverse_mode"; then
+            commit_message="gitign: reverse ${#patterns[@]} patterns"
         elif ((${#patterns[@]} == 1)); then
             commit_message="gitign: ignore ${patterns[0]}"
         else

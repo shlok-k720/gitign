@@ -45,9 +45,11 @@
       <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">gitign</span> <span class="string">nodemodules</span>
 <span class="comment"># Adds **/node_modules/, untracks matching dependencies, then commits.</span>
 
+<span class="prompt">$</span> <span class="cmd">gitign</span> <span class="string">secrets</span>
 <span class="prompt">$</span> <span class="cmd">gitign</span> <span class="string">dsstore</span>
 <span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--recursive-filenames</span> <span class="string">database.db</span>
-<span class="prompt">$</span> <span class="cmd">gitign</span> <span class="string">'**/*.log'</span></pre></div>
+<span class="prompt">$</span> <span class="cmd">gitign</span> <span class="string">'**/*.log'</span>
+<span class="prompt">$</span> <span class="cmd">gitign</span> <span class="string">reverse</span> <span class="string">secrets</span></pre></div>
       <table>
         <thead><tr><th>Preset</th><th>Resolved pattern</th><th>Preset</th><th>Resolved pattern</th></tr></thead>
         <tbody>
@@ -55,7 +57,8 @@
           <tr><td><code>env</code></td><td><code>**/.env</code></td><td><code>logs</code></td><td><code>**/*.log</code></td></tr>
           <tr><td><code>coverage</code></td><td><code>coverage/</code></td><td><code>dist</code></td><td><code>dist/</code></td></tr>
           <tr><td><code>vscode</code></td><td><code>.vscode/</code></td><td><code>idea</code></td><td><code>.idea/</code></td></tr>
-          <tr><td><code>pythoncache</code></td><td><code>**/__pycache__/</code></td><td><code>--recursive-filenames</code></td><td><code>file -&gt; **/file</code></td></tr>
+          <tr><td><code>pythoncache</code></td><td><code>**/__pycache__/</code></td><td><code>secrets</code></td><td>Common <code>.env</code>, DB, key, certificate, and <code>secrets.*</code> patterns</td></tr>
+          <tr><td><code>--recursive-filenames</code></td><td><code>file -&gt; **/file</code></td><td><code>reverse</code></td><td>Remove a matching gitign rule and re-track current matches</td></tr>
         </tbody>
       </table>
       <div class="callout"><strong>Pattern scope.</strong> Patterns are relative to the directory where you invoke gitign. A pattern beginning with <code>/</code> is relative to the repository root. Quote globs containing <code>*</code>, <code>?</code>, <code>[</code>, or <code>!</code>.</div>
@@ -124,8 +127,10 @@
       <h2>Undo</h2>
       <div class="terminal"><pre><span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--backup-dir</span> <span class="string">../gitign-backups</span> <span class="string">'**/*.log'</span>
 <span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--dry-run --undo</span>
-<span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--undo</span></pre></div>
+<span class="prompt">$</span> <span class="cmd">gitign</span> <span class="flag">--undo</span>
+<span class="prompt">$</span> <span class="cmd">gitign</span> <span class="string">reverse</span> <span class="string">secrets</span></pre></div>
       <p>Gitign stores one transaction under <code>.git/gitign/</code>. Undo removes newly added rules, restores index entries, and restores backup-mode local files. An automatic commit is undone with a revert only while that commit remains <code>HEAD</code>. Permanently deleted and trashed files cannot be restored automatically.</p>
+      <p><code>gitign reverse ...</code> is different from <code>--undo</code>: it reverses the specific pattern or preset you name now, removes the corresponding ignore rule, and re-tracks any current matching paths. It does not recover files that were already permanently deleted, trashed, or moved to backup storage.</p>
     </section>
 
     <section>
@@ -133,7 +138,7 @@
       <div class="flow">
         <div class="step"><strong>1. Resolve</strong><br>Find the repository, load config, and expand aliases.</div>
         <div class="step"><strong>2. Preview</strong><br>Show resolved rules and matching path counts.</div>
-        <div class="step"><strong>3. Apply</strong><br>Add ignore rules, untrack paths, and handle local matches if requested.</div>
+        <div class="step"><strong>3. Apply</strong><br>Add or remove gitign-managed ignore rules, then untrack or re-track paths.</div>
         <div class="step"><strong>4. Record</strong><br>Save undo metadata and optionally make a focused commit.</div>
       </div>
       <div class="terminal"><pre><span class="comment"># The index changes without deleting the working-tree file by default.</span>
